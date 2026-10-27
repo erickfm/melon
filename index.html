@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#efe2c3">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <title>Melon</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='54' r='42' fill='%23cdb86c' stroke='%23fbf5e6' stroke-width='5'/><path d='M50 12 q4 -8 12 -8' stroke='%237a6630' stroke-width='6' fill='none'/></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap">
+  <link rel="modulepreload" href="js/constants.js">
+  <link rel="modulepreload" href="js/paper.js">
+  <link rel="modulepreload" href="js/items.js">
+  <link rel="modulepreload" href="js/physics.js">
+  <link rel="modulepreload" href="js/fx.js">
+  <link rel="modulepreload" href="js/audio.js">
+  <link rel="modulepreload" href="js/render.js">
+  <link rel="modulepreload" href="js/game.js">
+  <style>
+    :root {
+      --bg: #efe2c3;
+      --paper: #fbf5e6;
+      --ink: #4a3426;
+      --ink-soft: rgba(74, 52, 38, 0.6);
+      --accent: #c0453b;
+      --gold: #c98a12;
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      -webkit-touch-callout: none;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: var(--bg);
+      font-family: 'Gaegu', 'Comic Sans MS', sans-serif;
+      color: var(--ink);
+    }
+
+    #game {
+      display: block;
+      touch-action: none;
+    }
+
+    .overlay {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: rgba(239, 226, 195, 0.55);
+      transition: opacity 0.25s;
+    }
+    .overlay.hidden {
+      opacity: 0;
+      pointer-events: none;
+    }
+
+    .card {
+      background: var(--paper);
+      padding: 26px 34px 24px;
+      text-align: center;
+      border-radius: 14px 10px 16px 9px;
+      box-shadow: 4px 6px 0 rgba(60, 35, 15, 0.22);
+      transform: rotate(-1.5deg);
+      min-width: 230px;
+    }
+    .overlay.hidden .card { transform: rotate(-1.5deg) scale(0.92); }
+    .card { transition: transform 0.25s cubic-bezier(.3, 1.6, .5, 1); }
+
+    .title {
+      font-size: 38px;
+      font-weight: 700;
+      line-height: 1;
+      margin-bottom: 14px;
+    }
+    .label {
+      font-size: 18px;
+      color: var(--ink-soft);
+    }
+    .big {
+      font-size: 64px;
+      font-weight: 700;
+      line-height: 0.95;
+    }
+    .row {
+      font-size: 20px;
+      color: var(--ink-soft);
+      margin-top: 4px;
+    }
+    .row.gold {
+      color: var(--gold);
+      font-weight: 700;
+    }
+
+    button {
+      margin-top: 18px;
+      font: 700 26px 'Gaegu', 'Comic Sans MS', sans-serif;
+      color: var(--paper);
+      background: var(--accent);
+      border: none;
+      padding: 6px 32px 8px;
+      border-radius: 10px 14px 9px 13px;
+      box-shadow: 2px 4px 0 rgba(60, 35, 15, 0.25);
+      cursor: pointer;
+      transform: rotate(1deg);
+    }
+    button:active {
+      transform: rotate(1deg) translate(2px, 3px);
+      box-shadow: 0 1px 0 rgba(60, 35, 15, 0.25);
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <div id="over" class="overlay hidden">
+    <div class="card">
+      <div class="title">jar's full!</div>
+      <div class="label">score</div>
+      <div class="big" id="over-score">0</div>
+      <div class="row" id="over-best"></div>
+      <div class="row" id="over-biggest"></div>
+      <button id="again">again</button>
+    </div>
+  </div>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>
