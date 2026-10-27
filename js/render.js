@@ -1,12 +1,14 @@
 /**
  * Canvas setup and drawing: letterboxed world transform (DPR capped at 2),
- * sprite cache, jar, held item, effects, HUD.
+ * sprite cache, camera (shake + zoom kicks), beat-synced background, jar,
+ * squashing bodies with motion trails, held item, effects, HUD.
  */
 
 import { WORLD_W, WORLD_H, JAR, DANGER_Y, DROP_Y, NEXT, BUTTONS, CHAIN_Y } from './constants.js';
 import { TIERS, buildSprite } from './items.js';
 import { TAU, mulberry32, rectPts, tracePoly, getGrain } from './paper.js';
-import { fx, drawFx } from './fx.js';
+import { fx, drawFx, drawBackFx, drawBanners } from './fx.js';
+import { beatPhase } from './audio.js';
 
 const BG = '#efe2c3';
 const INK = '#4a3426';
@@ -55,36 +57,82 @@ export function toWorld(clientX, clientY) {
 }
 
 export function render(s) {
+  const beat = beatPhase();
+  const pump = (1 - beat) ** 3;  // spikes on each beat
+
+  // --- screen space background ---
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   ctx.fillStyle = BG;
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  const cx = canvas.width / 2, cy = canvas.height * 0.45, big = Math.max(canvas.width, canvas.height);
+  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, big * 0.75);
+  if (s.fever) {
+    const h = (s.time * 90) % 360;
+    glow.addColorStop(0, `hsla(${h},95%,75%,${0.45 + pump * 0.25})`);
+    glow.addColorStop(0.5, `hsla(${(h + 60) % 360},90%,70%,0.3)`);
+    glow.addColorStop(1, `hsla(${(h + 140) % 360},85%,60%,0.35)`);
+  } else {
+    glow.addColorStop(0, `rgba(255,248,225,${0.35 + pump * 0.18})`);
+    glow.addColorStop(1, 'rgba(200,160,110,0.18)');
+  }
+  ctx.fillStyle = glow;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
   ctx.fillStyle = grainPattern;
   ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+  // --- camera: letterbox, shake, zoom kick around the jar ---
   const k = view.scale * view.dpr;
-  const sx = fx.shake ? (Math.random() - 0.5) * fx.shake : 0;
-  const sy = fx.shake ? (Math.random() - 0.5) * fx.shake : 0;
-  ctx.setTransform(k, 0, 0, k, (view.ox + sx * view.scale) * view.dpr, (view.oy + sy * view.scale) * view.dpr);
+  const shake = fx.shake + (s.overflow > 0 ? 1.2 : 0);
+  const sx = shake ? (Math.random() - 0.5) * shake : 0;
+  const sy = shake ? (Math.random() - 0.5) * shake : 0;
+  const z = 1 + fx.zoom + (s.fever ? pump * 0.006 : 0);
+  const fx0 = WORLD_W / 2, fy0 = (JAR.top + JAR.bottom) / 2;
+  ctx.setTransform(k * z, 0, 0, k * z,
+    (view.ox + (sx + fx0 - fx0 * z) * view.scale) * view.dpr,
+    (view.oy + (sy + fy0 - fy0 * z) * view.scale) * view.dpr);
 
-  drawJarBack();
+  drawBackFx(ctx, s.fever, s.time, beat);
+  drawJarBack(s, pump);
   if (s.phase === 'play' && s.current !== null) drawGuide(s);
-  drawBodies(s.bodies);
-  drawJarFront();
+  drawBodies(s);
+  drawJarFront(s, pump);
   drawDanger(s);
-  if (s.current !== null && s.phase === 'play') drawHeld(s);
+  if (s.current !== null && s.phase === 'play') drawHeld(s, pump);
   if (!s.dropped && s.phase === 'play') {
     ctx.globalAlpha = 0.45 + 0.15 * Math.sin(s.time * 3);
     text('drag to aim, let go to drop', WORLD_W / 2, 440, 20, 'center', INK);
     ctx.globalAlpha = 1;
   }
   drawFx(ctx, font);
-  drawHud(s);
+  drawHud(s, pump);
+  drawBanners(ctx, font, s.time);
+
+  // --- screen space overlays ---
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  if (s.near > 0.35 && s.phase === 'play') {
+    const a = (s.near - 0.35) / 0.65 * (0.25 + 0.2 * Math.sin(s.time * (s.overflow > 0 ? 14 : 5)) ** 2) + (s.overflow > 0 ? 0.15 : 0);
+    const v = ctx.createRadialGradient(cx, canvas.height / 2, big * 0.3, cx, canvas.height / 2, big * 0.75);
+    v.addColorStop(0, 'rgba(200,40,40,0)');
+    v.addColorStop(1, `rgba(200,40,40,${a})`);
+    ctx.fillStyle = v;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
+  if (fx.whiteout > 0) {
+    ctx.fillStyle = `rgba(255,252,240,${fx.whiteout ** 2 * 0.7})`;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  }
 }
 
-export function drawItem(tier, x, y, angle = 0, scale = 1) {
+// sq > 0 squashes along angle sqA (and bulges across it); sq < 0 stretches.
+export function drawItem(tier, x, y, angle = 0, scale = 1, sq = 0, sqA = 0) {
   const sp = sprites[tier], w = sp.size / sp.ppu;
   ctx.save();
   ctx.translate(x, y);
+  if (sq) {
+    ctx.rotate(sqA);
+    ctx.scale(1 - sq, 1 + sq * 0.8);
+    ctx.rotate(-sqA);
+  }
   if (angle) ctx.rotate(angle);
   if (scale !== 1) ctx.scale(scale, scale);
   ctx.drawImage(sp.canvas, -w / 2, -w / 2, w, w);
@@ -111,16 +159,18 @@ function cutout(pts, color, dx = 2, dy = 3) {
   ctx.fill();
 }
 
-function drawJarBack() {
+function drawJarBack(s, pump) {
   tracePoly(ctx, jar.back);
-  ctx.fillStyle = 'rgba(160,110,60,0.13)';
+  ctx.fillStyle = s.fever ? `rgba(255,255,255,${0.16 + pump * 0.12})` : 'rgba(160,110,60,0.13)';
   ctx.fill();
 }
 
-function drawJarFront() {
-  cutout(jar.left, '#c08f58');
-  cutout(jar.right, '#c08f58');
-  cutout(jar.floor, '#b5834d');
+function drawJarFront(s, pump) {
+  const wall = s.fever ? `hsl(${(s.time * 90 + 30) % 360},55%,${55 + pump * 12}%)` : '#c08f58';
+  const floor = s.fever ? `hsl(${(s.time * 90 + 50) % 360},50%,${50 + pump * 12}%)` : '#b5834d';
+  cutout(jar.left, wall);
+  cutout(jar.right, wall);
+  cutout(jar.floor, floor);
   // corrugation dashes
   ctx.strokeStyle = 'rgba(120,80,40,0.35)';
   ctx.lineWidth = 1.2;
@@ -136,7 +186,8 @@ function drawJarFront() {
   ctx.setLineDash([]);
 }
 
-function drawBodies(bodies) {
+function drawBodies(s) {
+  const bodies = s.bodies;
   ctx.beginPath();
   for (const b of bodies) {
     ctx.moveTo(b.x + 1.5 + b.r, b.y + 3);
@@ -144,7 +195,21 @@ function drawBodies(bodies) {
   }
   ctx.fillStyle = SHADOW;
   ctx.fill();
-  for (const b of bodies) drawItem(b.tier, b.x, b.y, b.angle, b.r / b.R);
+  // motion trails for fast movers
+  for (const b of bodies) {
+    const vx = b.x - b.px, vy = b.y - b.py, sp = Math.hypot(vx, vy);
+    if (sp < 1.6) continue;
+    for (let i = 3; i >= 1; i--) {
+      ctx.globalAlpha = 0.12 * (4 - i) * Math.min(1, (sp - 1.6) / 2);
+      drawItem(b.tier, b.x - vx * i * 2.2, b.y - vy * i * 2.2, b.angle, b.r / b.R);
+    }
+  }
+  ctx.globalAlpha = 1;
+  for (const b of bodies) {
+    // pieces above the line tremble while the overflow timer runs
+    const tr = s.overflow > 0 && b.y - b.r < DANGER_Y + 10 ? (Math.random() - 0.5) * 2.4 : 0;
+    drawItem(b.tier, b.x + tr, b.y, b.angle, b.r / b.R, b.sq, b.sqA);
+  }
 }
 
 function surfaceY(x, bodies) {
@@ -160,39 +225,52 @@ function surfaceY(x, bodies) {
 }
 
 function drawGuide(s) {
-  const r = TIERS[s.current].r, x = s.heldX;
-  ctx.strokeStyle = 'rgba(74,52,38,0.22)';
+  const r = TIERS[s.current].r, x = s.heldX, y1 = surfaceY(x, s.bodies);
+  ctx.strokeStyle = s.fever ? `hsla(${(s.time * 200) % 360},80%,50%,0.5)` : 'rgba(74,52,38,0.22)';
   ctx.lineWidth = 1.6;
   ctx.setLineDash([4, 7]);
+  ctx.lineDashOffset = -s.time * 30;
   ctx.beginPath();
   ctx.moveTo(x, DROP_Y + r + 4);
-  ctx.lineTo(x, surfaceY(x, s.bodies));
+  ctx.lineTo(x, y1);
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
+  // landing marker
+  ctx.fillStyle = 'rgba(74,52,38,0.25)';
+  ctx.beginPath();
+  ctx.ellipse(x, y1, 6, 2.2, 0, 0, TAU);
+  ctx.fill();
 }
 
-function drawHeld(s) {
+function drawHeld(s, pump) {
   const t = Math.min(1, s.appearT / 0.18);
-  const scale = t < 1 ? 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2 : 1;
+  const pop = t < 1 ? 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2 : 1;
   const r = TIERS[s.current].r;
+  const tremble = s.overflow > 0 ? (Math.random() - 0.5) * 2 : 0;
+  const y = DROP_Y - pump * 2.5;
   ctx.beginPath();
-  ctx.arc(s.heldX + 1.5, DROP_Y + 3, r * scale, 0, TAU);
+  ctx.arc(s.heldX + 1.5, y + 3, r * pop, 0, TAU);
   ctx.fillStyle = SHADOW;
   ctx.fill();
-  drawItem(s.current, s.heldX, DROP_Y, s.hangAngle, scale);
+  // stretch sideways with aim speed
+  const stretch = Math.max(-0.25, Math.min(0.25, s.heldVel * 0.0006));
+  drawItem(s.current, s.heldX + tremble, y, s.hangAngle + s.heldTilt, pop, -Math.abs(stretch), 0);
 }
 
 function drawDanger(s) {
   let a = 0.22 + 0.5 * s.near;
   if (s.overflow > 0) a = 0.55 + 0.45 * Math.sin(s.time * 18);
   ctx.strokeStyle = `rgba(205,70,60,${a})`;
-  ctx.lineWidth = 2.2;
+  ctx.lineWidth = 2.2 + (s.overflow > 0 ? 1.5 : 0);
   ctx.setLineDash([9, 7]);
+  ctx.lineDashOffset = s.overflow > 0 ? s.time * 60 : 0;
   ctx.beginPath();
   ctx.moveTo(JAR.left + 2, DANGER_Y);
   ctx.lineTo(JAR.right - 2, DANGER_Y);
   ctx.stroke();
   ctx.setLineDash([]);
+  ctx.lineDashOffset = 0;
 }
 
 function paperDisc(x, y, r) {
@@ -206,14 +284,39 @@ function paperDisc(x, y, r) {
   ctx.fill();
 }
 
-function drawHud(s) {
+function drawHud(s, pump) {
   text('score', 28, 30, 17, 'left', INK_SOFT);
-  text(String(Math.round(s.shownScore)), 26, 70, 42);
+  const punch = 1 + s.scorePunch * 0.35;
+  ctx.save();
+  ctx.translate(26, 70);
+  ctx.scale(punch, punch);
+  ctx.rotate(-s.scorePunch * 0.06);
+  text(String(Math.round(s.shownScore)), 0, 0, 42, 'left', s.fever ? `hsl(${(s.time * 300) % 360},70%,40%)` : INK);
+  ctx.restore();
   text('best ' + Math.max(s.best, s.score), 28, 94, 17, 'left', INK_SOFT);
 
+  // combo + fever meters
+  if (s.combo >= 2 && s.time - s.lastMerge < s.comboWindow) {
+    const left = 1 - (s.time - s.lastMerge) / s.comboWindow;
+    text('×' + s.comboMult.toFixed(1), 150, 64, 24 + pump * 3, 'left', '#c0453b');
+    ctx.fillStyle = 'rgba(192,69,59,0.25)';
+    ctx.fillRect(150, 72, 50, 4);
+    ctx.fillStyle = '#c0453b';
+    ctx.fillRect(150, 72, 50 * left, 4);
+  }
+  if (s.fever) {
+    const left = s.feverT / s.feverMax;
+    text('FEVER', 150, 100, 18, 'left', `hsl(${(s.time * 400) % 360},85%,48%)`);
+    for (let i = 0; i < 20; i++) {
+      if (i / 20 > left) break;
+      ctx.fillStyle = `hsl(${(i * 18 + s.time * 300) % 360},85%,60%)`;
+      ctx.fillRect(150 + i * 2.6, 104, 2.2, 4);
+    }
+  }
+
   text('next', NEXT.x, 30, 17, 'center', INK_SOFT);
-  paperDisc(NEXT.x, NEXT.y, NEXT.r);
-  drawItem(s.next, NEXT.x, NEXT.y, 0, Math.min(1, 19 / TIERS[s.next].r));
+  paperDisc(NEXT.x, NEXT.y, NEXT.r + pump * 1.2);
+  drawItem(s.next, NEXT.x, NEXT.y, Math.sin(s.time * 2) * 0.1, Math.min(1, 19 / TIERS[s.next].r));
 
   const { mute, restart } = BUTTONS;
   paperDisc(mute.x, mute.y, mute.r);
@@ -262,7 +365,9 @@ function drawHud(s) {
   TIERS.forEach((t, i) => {
     const cx = JAR.left + step * (i + 0.5), ir = 7 + i * 0.95;
     if (i <= s.discovered) {
-      drawItem(i, cx, CHAIN_Y, 0, ir / t.r);
+      const lit = s.chainFlash[i] || 0;
+      const bob = i === s.biggest ? Math.sin(s.time * 4) * 1.5 : 0;
+      drawItem(i, cx, CHAIN_Y + bob - lit * 6, lit * Math.sin(s.time * 30) * 0.3, (ir / t.r) * (1 + lit * 0.5));
     } else {
       ctx.beginPath();
       ctx.arc(cx, CHAIN_Y, ir, 0, TAU);

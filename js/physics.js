@@ -2,6 +2,8 @@
  * Verlet circle physics: substepped integration, mass-weighted position
  * correction, contact friction, and a visual-only roll (spin) estimate.
  * Velocities are implicit (x - px) and measured per substep.
+ * Also records the hardest impact each body took (`hit`, `hnx`, `hny`)
+ * so the game can squash it and play a sound.
  */
 
 import { JAR, GRAVITY, SUBSTEPS } from './constants.js';
@@ -17,8 +19,10 @@ const MAX_V = 8;            // units per substep
 const MAX_SEP = 0.6;        // cap on push-apart speed, so squeezed items can't get launched
 const GROW_TIME = 0.16;     // seconds for a merged item to reach full size
 const MERGE_SLOP = 0.5;     // same-tier items this close count as touching
+const MAX_UP = 520;         // units/s; caps hops from shockwaves and squeezes
 
 export const bodies = [];
+let lastH = 0;
 
 const easeOutBack = t => 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
 
@@ -29,11 +33,35 @@ export function makeBody(tier, x, y, { r0, vx = 0, vy = 0, angle = 0 } = {}) {
     tier, x, y, px: x - vx, py: y - vy,
     r: start, r0: start, R, m: R * R, grow: start === R ? 1 : 0,
     angle, spin: 0, age: 0, dead: false,
+    hit: 0, hnx: 0, hny: 1,              // hardest impact since last read (units/substep)
+    sq: 0, sqV: 0, sqA: 0, lastSound: 0, // squash spring, driven by the game
   };
+}
+
+// Radial push, e.g. from a merge. Strength is units/substep at the center.
+export function shockwave(x, y, radius, strength, skip) {
+  for (const b of bodies) {
+    if (b === skip || b.dead) continue;
+    const dx = b.x - x, dy = b.y - y, d = Math.hypot(dx, dy) || 1;
+    if (d > radius + b.r) continue;
+    const f = strength * (1 - Math.max(0, d - b.r) / radius) * Math.min(1, 900 / b.m + 0.35);
+    b.px -= (dx / d) * f;
+    b.py -= (dy / d) * f * 0.6 - f * 0.2;  // mostly sideways, a little up
+  }
 }
 
 export function stepPhysics(dt, onMerge) {
   const h = dt / SUBSTEPS, g = GRAVITY * h * h;
+  // keep real velocity when the step size changes (slow motion)
+  if (lastH && h !== lastH) {
+    const k = h / lastH;
+    for (const b of bodies) {
+      b.px = b.x - (b.x - b.px) * k;
+      b.py = b.y - (b.y - b.py) * k;
+      b.spin *= k;
+    }
+  }
+  lastH = h;
   for (let s = 0; s < SUBSTEPS; s++) {
     integrate(h, g);
     for (let it = 0; it < 2; it++) {
@@ -47,11 +75,15 @@ export function stepPhysics(dt, onMerge) {
   for (const b of bodies) b.age += dt;
 }
 
+// Per-substep speed → units/second at the current step size.
+export const perSecond = v => (lastH ? v / lastH : 0);
+
 function integrate(h, g) {
   for (const b of bodies) {
     let vx = (b.x - b.px) * DAMP, vy = (b.y - b.py) * DAMP;
     const sp = Math.hypot(vx, vy);
     if (sp > MAX_V) { vx *= MAX_V / sp; vy *= MAX_V / sp; }
+    if (vy < -MAX_UP * h) vy = -MAX_UP * h;
     b.px = b.x; b.py = b.y;
     b.x += vx; b.y += vy + g;
     b.angle += b.spin;
@@ -61,6 +93,10 @@ function integrate(h, g) {
       b.r = b.r0 + (b.R - b.r0) * easeOutBack(b.grow);
     }
   }
+}
+
+function recordHit(b, v, nx, ny) {
+  if (v > b.hit) { b.hit = v; b.hnx = nx; b.hny = ny; }
 }
 
 function collide(onMerge) {
@@ -84,6 +120,13 @@ function collide(onMerge) {
       const d = Math.sqrt(d2) || 1e-4;
       const nx = dx / d, ny = dy / d;
       const wa = b.m / (a.m + b.m), wb = 1 - wa;
+
+      const approach = -(((b.x - b.px) - (a.x - a.px)) * nx + ((b.y - b.py) - (a.y - a.py)) * ny);
+      if (approach > 0) {
+        recordHit(a, approach * wa, nx, ny);
+        recordHit(b, approach * wb, -nx, -ny);
+      }
+
       const c = (a.r + b.r - d) * RESPONSE;
       a.x -= nx * c * wa; a.y -= ny * c * wa;
       b.x += nx * c * wb; b.y += ny * c * wb;
@@ -115,17 +158,20 @@ function walls() {
     if (b.dead) continue;
     const vx = b.x - b.px, vy = b.y - b.py;
     if (b.x - b.r < JAR.left) {
+      recordHit(b, -vx, -1, 0);
       b.x = JAR.left + b.r;
       b.px = Math.max(b.px, b.x - MAX_SEP);
       b.py += vy * WALL_FRICTION;
       b.spin += (vy / b.r - b.spin) * SPIN_BLEND;
     } else if (b.x + b.r > JAR.right) {
+      recordHit(b, vx, 1, 0);
       b.x = JAR.right - b.r;
       b.px = Math.min(b.px, b.x + MAX_SEP);
       b.py += vy * WALL_FRICTION;
       b.spin += (-vy / b.r - b.spin) * SPIN_BLEND;
     }
     if (b.y + b.r > JAR.bottom) {
+      recordHit(b, vy, 0, 1);
       b.y = JAR.bottom - b.r;
       b.py = Math.min(b.py, b.y + MAX_SEP);
       b.px += vx * FLOOR_FRICTION;
