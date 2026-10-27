@@ -16,7 +16,7 @@ import {
   playCombo, playHeartbeat, playOver, playUi,
 } from './audio.js';
 import { haptic } from './haptics.js';
-import { initRender, resize, render, toWorld } from './render.js';
+import { initRender, resize, render, toWorld, adaptQuality } from './render.js';
 
 const canvas = document.getElementById('game');
 const overEl = document.getElementById('over');
@@ -433,6 +433,7 @@ s.heldX = heldXFor(s.current);
 
 let last = performance.now(), acc = 0;
 function frame(now) {
+  if (!document.hidden) adaptQuality(now - last);
   acc += Math.min(0.1, (now - last) / 1000);
   last = now;
   let n = 0;

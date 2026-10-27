@@ -1,5 +1,6 @@
 /**
- * Canvas setup and drawing: letterboxed world transform (DPR capped at 2),
+ * Canvas setup and drawing: canvas sized to the letterboxed world (DPR capped
+ * at 2 and by a pixel budget, lowered automatically if frames run slow),
  * sprite cache, camera (shake + zoom kicks), beat-synced background, jar,
  * squashing bodies with motion trails, held item, effects, HUD.
  */
@@ -16,14 +17,17 @@ const INK_SOFT = 'rgba(74,52,38,0.6)';
 const PAPER = '#fbf5e6';
 const SHADOW = 'rgba(60,35,15,0.22)';
 
-export const view = { cssW: 0, cssH: 0, dpr: 1, scale: 1, ox: 0, oy: 0 };
-let canvas, ctx, sprites = [], grainPattern = null, jar = null;
+export const view = { cssW: 0, cssH: 0, dpr: 1, scale: 1, ox: 0, oy: 0, quality: 1 };
+let canvas, ctx, sprites = [], jar = null;
+let bgCache = null;
+
+const MAX_PIXELS = 2.6e6;  // device-pixel budget for the canvas
 
 export const font = size => `700 ${size}px Gaegu, 'Comic Sans MS', sans-serif`;
 
 export function initRender(c) {
   canvas = c;
-  ctx = c.getContext('2d');
+  ctx = c.getContext('2d', { alpha: false });
   const rng = mulberry32(42), W = 14;
   const { left: L, right: R, top: T, bottom: B } = JAR;
   jar = {
@@ -36,20 +40,74 @@ export function initRender(c) {
   resize();
 }
 
+// The canvas covers only the letterboxed world; the margins are plain CSS.
 export function resize() {
-  view.dpr = Math.min(2, window.devicePixelRatio || 1);
-  view.cssW = window.innerWidth;
-  view.cssH = window.innerHeight;
+  view.scale = Math.min(window.innerWidth / WORLD_W, window.innerHeight / WORLD_H);
+  view.cssW = WORLD_W * view.scale;
+  view.cssH = WORLD_H * view.scale;
+  view.ox = (window.innerWidth - view.cssW) / 2;
+  view.oy = (window.innerHeight - view.cssH) / 2;
+  const budget = Math.sqrt(MAX_PIXELS / (view.cssW * view.cssH));
+  view.dpr = Math.max(0.75, Math.min(2, window.devicePixelRatio || 1, budget) * view.quality);
   canvas.width = Math.round(view.cssW * view.dpr);
   canvas.height = Math.round(view.cssH * view.dpr);
-  canvas.style.width = view.cssW + 'px';
-  canvas.style.height = view.cssH + 'px';
-  view.scale = Math.min(view.cssW / WORLD_W, view.cssH / WORLD_H);
-  view.ox = (view.cssW - WORLD_W * view.scale) / 2;
-  view.oy = (view.cssH - WORLD_H * view.scale) / 2;
+  Object.assign(canvas.style, {
+    position: 'absolute', left: view.ox + 'px', top: view.oy + 'px',
+    width: view.cssW + 'px', height: view.cssH + 'px',
+  });
   const ppu = view.scale * view.dpr;
   sprites = TIERS.map((_, i) => buildSprite(i, ppu));
-  grainPattern = ctx.createPattern(getGrain(), 'repeat');
+  buildBackground();
+}
+
+// Drop resolution when frames keep running long. Call once per frame.
+let slowTime = 0, fastTime = 0;
+export function adaptQuality(frameMs) {
+  if (frameMs > 21) { slowTime += frameMs; fastTime = 0; } else { fastTime += frameMs; slowTime = Math.max(0, slowTime - frameMs * 0.5); }
+  if (slowTime > 1500 && view.quality > 0.5) {
+    view.quality = Math.max(0.5, view.quality * 0.8);
+    slowTime = 0;
+    resize();
+  }
+}
+
+function buildBackground() {
+  const w = canvas.width, h = canvas.height;
+  bgCache = document.createElement('canvas');
+  bgCache.width = w;
+  bgCache.height = h;
+  const g = bgCache.getContext('2d');
+  g.fillStyle = BG;
+  g.fillRect(0, 0, w, h);
+  const glow = g.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, Math.max(w, h) * 0.6);
+  glow.addColorStop(0, 'rgba(255,250,232,0.45)');
+  glow.addColorStop(1, 'rgba(255,250,232,0)');
+  g.fillStyle = glow;
+  g.fillRect(0, 0, w, h);
+  g.fillStyle = g.createPattern(getGrain(), 'repeat');
+  g.fillRect(0, 0, w, h);
+
+  // page margins match the canvas paper
+  const tile = getGrain();
+  document.body.style.backgroundImage = `url(${tile.toDataURL()})`;
+  document.body.style.backgroundSize = `${tile.width / (window.devicePixelRatio || 1)}px`;
+}
+
+// Red edges only: four gradient bands instead of a full-screen radial fill.
+function drawVignette(W, H) {
+  const bw = W * 0.22, bh = H * 0.14, red = 'rgba(200,40,40,0.9)', clear = 'rgba(200,40,40,0)';
+  const band = (x0, y0, x1, y1, rx, ry, rw, rh) => {
+    const g = ctx.createLinearGradient(x0, y0, x1, y1);
+    g.addColorStop(0, red);
+    g.addColorStop(0.35, 'rgba(200,40,40,0.35)');
+    g.addColorStop(1, clear);
+    ctx.fillStyle = g;
+    ctx.fillRect(rx, ry, rw, rh);
+  };
+  band(0, 0, bw, 0, 0, 0, bw, H);
+  band(W, 0, W - bw, 0, W - bw, 0, bw, H);
+  band(0, 0, 0, bh, 0, 0, W, bh);
+  band(0, H, 0, H - bh, 0, H - bh, W, bh);
 }
 
 export function toWorld(clientX, clientY) {
@@ -59,37 +117,25 @@ export function toWorld(clientX, clientY) {
 export function render(s) {
   const beat = beatPhase();
   const pump = (1 - beat) ** 3;  // spikes on each beat
+  const W = canvas.width, H = canvas.height;
 
-  // --- screen space background ---
+  // --- background: one cached blit, plus a stretched wash in fever ---
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  ctx.fillStyle = BG;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  const cx = canvas.width / 2, cy = canvas.height * 0.45, big = Math.max(canvas.width, canvas.height);
-  const glow = ctx.createRadialGradient(cx, cy, 0, cx, cy, big * 0.75);
+  ctx.drawImage(bgCache, 0, 0);
   if (s.fever) {
-    const h = (s.time * 90) % 360;
-    glow.addColorStop(0, `hsla(${h},95%,75%,${0.45 + pump * 0.25})`);
-    glow.addColorStop(0.5, `hsla(${(h + 60) % 360},90%,70%,0.3)`);
-    glow.addColorStop(1, `hsla(${(h + 140) % 360},85%,60%,0.35)`);
-  } else {
-    glow.addColorStop(0, `rgba(255,248,225,${0.35 + pump * 0.18})`);
-    glow.addColorStop(1, 'rgba(200,160,110,0.18)');
+    // solid fill is the cheapest full-screen pass; hue variety comes from the jar, motes and confetti
+    ctx.fillStyle = `hsla(${(s.time * 90) % 360},90%,70%,${0.32 + pump * 0.12})`;
+    ctx.fillRect(0, 0, W, H);
   }
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
-  ctx.fillStyle = grainPattern;
-  ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-  // --- camera: letterbox, shake, zoom kick around the jar ---
+  // --- camera: shake and zoom kick around the jar ---
   const k = view.scale * view.dpr;
   const shake = fx.shake + (s.overflow > 0 ? 1.2 : 0);
   const sx = shake ? (Math.random() - 0.5) * shake : 0;
   const sy = shake ? (Math.random() - 0.5) * shake : 0;
   const z = 1 + fx.zoom + (s.fever ? pump * 0.006 : 0);
   const fx0 = WORLD_W / 2, fy0 = (JAR.top + JAR.bottom) / 2;
-  ctx.setTransform(k * z, 0, 0, k * z,
-    (view.ox + (sx + fx0 - fx0 * z) * view.scale) * view.dpr,
-    (view.oy + (sy + fy0 - fy0 * z) * view.scale) * view.dpr);
+  ctx.setTransform(k * z, 0, 0, k * z, (sx + fx0 - fx0 * z) * k, (sy + fy0 - fy0 * z) * k);
 
   drawBackFx(ctx, s.fever, s.time, beat);
   drawJarBack(s, pump);
@@ -110,16 +156,13 @@ export function render(s) {
   // --- screen space overlays ---
   ctx.setTransform(1, 0, 0, 1, 0, 0);
   if (s.near > 0.35 && s.phase === 'play') {
-    const a = (s.near - 0.35) / 0.65 * (0.25 + 0.2 * Math.sin(s.time * (s.overflow > 0 ? 14 : 5)) ** 2) + (s.overflow > 0 ? 0.15 : 0);
-    const v = ctx.createRadialGradient(cx, canvas.height / 2, big * 0.3, cx, canvas.height / 2, big * 0.75);
-    v.addColorStop(0, 'rgba(200,40,40,0)');
-    v.addColorStop(1, `rgba(200,40,40,${a})`);
-    ctx.fillStyle = v;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.globalAlpha = Math.min(1, (s.near - 0.35) / 0.65 * (0.25 + 0.2 * Math.sin(s.time * (s.overflow > 0 ? 14 : 5)) ** 2) + (s.overflow > 0 ? 0.15 : 0));
+    drawVignette(W, H);
+    ctx.globalAlpha = 1;
   }
   if (fx.whiteout > 0) {
     ctx.fillStyle = `rgba(255,252,240,${fx.whiteout ** 2 * 0.7})`;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillRect(0, 0, W, H);
   }
 }
 
@@ -161,7 +204,7 @@ function cutout(pts, color, dx = 2, dy = 3) {
 
 function drawJarBack(s, pump) {
   tracePoly(ctx, jar.back);
-  ctx.fillStyle = s.fever ? `rgba(255,255,255,${0.16 + pump * 0.12})` : 'rgba(160,110,60,0.13)';
+  ctx.fillStyle = s.fever ? `rgba(255,255,255,${0.16 + pump * 0.12})` : `rgba(160,110,60,${0.13 - pump * 0.05})`;
   ctx.fill();
 }
 

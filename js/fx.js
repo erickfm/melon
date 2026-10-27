@@ -24,6 +24,8 @@ const BITS = [
   ['confetti', TIERS.map(t => t.color)],
 ];
 
+const MAX_PARTS = 360;  // oldest bits are dropped past this
+
 const rand = (a, b) => a + Math.random() * (b - a);
 const pick = arr => arr[(Math.random() * arr.length) | 0];
 
@@ -139,6 +141,7 @@ export function updateFx(dt) {
   fx.pulses = fx.pulses.filter(p => p.life < p.max);
   fx.banners = fx.banners.filter(b => b.life < b.max);
   fx.pops = fx.pops.filter(p => p.life < p.max);
+  if (fx.parts.length > MAX_PARTS) fx.parts.splice(0, fx.parts.length - MAX_PARTS);
   fx.shake = Math.max(0, fx.shake - dt * 28);
   fx.whiteout = Math.max(0, fx.whiteout - dt * 2.2);
   // camera zoom spring
@@ -158,15 +161,17 @@ export function updateFx(dt) {
 
 // Behind the jar: color pulses and pollen.
 export function drawBackFx(ctx, fever, time, beat) {
+  // soft ring of color expanding from the merge (stroke only covers the ring, not the disc)
   for (const p of fx.pulses) {
     const t = p.life / p.max, r = p.R * (0.3 + 0.7 * (1 - (1 - t) ** 3));
-    const g = ctx.createRadialGradient(p.x, p.y, r * 0.5, p.x, p.y, r);
-    g.addColorStop(0, 'rgba(0,0,0,0)');
-    g.addColorStop(0.8, hexA(p.color, 0.22 * (1 - t)));
-    g.addColorStop(1, 'rgba(0,0,0,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(p.x - r, p.y - r, r * 2, r * 2);
+    ctx.globalAlpha = 0.16 * (1 - t);
+    ctx.strokeStyle = p.color;
+    ctx.lineWidth = r * 0.35;
+    ctx.beginPath();
+    ctx.arc(p.x, p.y, r * 0.8, 0, TAU);
+    ctx.stroke();
   }
+  ctx.globalAlpha = 1;
   for (const m of fx.motes) {
     const tw = 0.5 + 0.5 * Math.sin(time * 2 + m.ph);
     ctx.fillStyle = fever ? `hsla(${(m.ph * 57 + time * 120) % 360},90%,70%,${0.4 + tw * 0.5})` : `rgba(255,250,225,${0.35 + tw * 0.45})`;
@@ -181,12 +186,8 @@ export function drawFx(ctx, font) {
   ctx.globalCompositeOperation = 'lighter';
   for (const f of fx.flashes) {
     const t = f.life / f.max, r = f.r * (0.6 + t * 0.6);
-    const g = ctx.createRadialGradient(f.x, f.y, 0, f.x, f.y, r);
-    g.addColorStop(0, `rgba(255,250,230,${0.9 * (1 - t)})`);
-    g.addColorStop(0.4, `rgba(255,235,190,${0.45 * (1 - t)})`);
-    g.addColorStop(1, 'rgba(255,230,180,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(f.x - r, f.y - r, r * 2, r * 2);
+    ctx.globalAlpha = 1 - t;
+    ctx.drawImage(flashTex(), f.x - r, f.y - r, r * 2, r * 2);
   }
   ctx.restore();
 
@@ -218,11 +219,13 @@ export function drawFx(ctx, font) {
       const flip = p.shape === 'seed' || p.shape === 'chunk' ? 1 : Math.cos(p.life * 9 + p.ph);
       ctx.scale(1, Math.abs(flip) * 0.8 + 0.2);
       shapePath(ctx, p.shape, p.w, p.h);
-      ctx.fillStyle = 'rgba(50,30,10,0.2)';
-      ctx.save();
-      ctx.translate(0.8, 1.2);
-      ctx.fill();
-      ctx.restore();
+      if (p.w > 7) {
+        ctx.fillStyle = 'rgba(50,30,10,0.2)';
+        ctx.save();
+        ctx.translate(0.8, 1.2);
+        ctx.fill();
+        ctx.restore();
+      }
       ctx.fillStyle = p.color;
       ctx.fill();
     }
@@ -316,8 +319,17 @@ function drawStar(ctx, p, fade) {
   ctx.restore();
 }
 
-function hexA(hex, a) {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${n >> 16},${(n >> 8) & 255},${n & 255},${a})`;
+let flash = null;
+function flashTex() {
+  if (flash) return flash;
+  flash = document.createElement('canvas');
+  flash.width = flash.height = 128;
+  const g = flash.getContext('2d'), grad = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  grad.addColorStop(0, 'rgba(255,250,230,0.9)');
+  grad.addColorStop(0.4, 'rgba(255,235,190,0.45)');
+  grad.addColorStop(1, 'rgba(255,230,180,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 128, 128);
+  return flash;
 }
 
