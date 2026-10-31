@@ -24,7 +24,7 @@ export const TIERS = [
 
 const PAPER = '#fbf5e6';
 
-export function buildSprite(tier, ppu) {
+export function buildSprite(tier, ppu, rimColor = PAPER) {
   const t = TIERS[tier];
   const Rpx = t.r * ppu;
   const pad = Math.ceil(Rpx * 0.14 + 2);
@@ -43,7 +43,7 @@ export function buildSprite(tier, ppu) {
   const n = t.sil ? 120 : 44;
 
   // white paper margin left by the scissors, then the colored cutout
-  fill(g, blob(rng, n, shape, 0.006), PAPER);
+  fill(g, blob(rng, n, shape, 0.006), rimColor);
   t.draw(g, rng, blob(rng, n, a => shape(a) * (1 - rim), 0.006));
 
   g.setTransform(1, 0, 0, 1, 0, 0);

@@ -15,12 +15,12 @@ import { beatPhase } from './audio.js';
 const THEMES = {
   light: {
     bg: '#efe2c3', glow: '255,250,232', glowA: 0.45, ink: '#4a3426', inkSoft: 'rgba(74,52,38,0.6)',
-    inkFaint: '74,52,38', paper: '#fbf5e6', shadow: 'rgba(60,35,15,0.22)', jarBack: '160,110,60', jarBackA: 0.13,
+    inkFaint: '74,52,38', paper: '#fbf5e6', rim: '#fbf5e6', shadow: 'rgba(60,35,15,0.22)', jarBack: '160,110,60', jarBackA: 0.13,
     wall: '#c08f58', floor: '#b5834d', dash: 'rgba(120,80,40,0.35)', strip: '#f6ead0',
   },
   dark: {
     bg: '#2a2638', glow: '150,140,215', glowA: 0.2, ink: '#efe2c3', inkSoft: 'rgba(239,226,195,0.6)',
-    inkFaint: '239,226,195', paper: '#3d3750', shadow: 'rgba(0,0,0,0.38)', jarBack: '12,8,24', jarBackA: 0.3,
+    inkFaint: '239,226,195', paper: '#3d3750', rim: '#4b4462', shadow: 'rgba(0,0,0,0.38)', jarBack: '12,8,24', jarBackA: 0.3,
     wall: '#8d6a4a', floor: '#7f5e40', dash: 'rgba(40,25,15,0.45)', strip: '#38324a',
   },
 };
@@ -30,7 +30,13 @@ export function setTheme(dark) {
   Object.assign(pal, THEMES[dark ? 'dark' : 'light']);
   document.documentElement.dataset.theme = dark ? 'dark' : 'light';
   document.querySelector('meta[name=theme-color]')?.setAttribute('content', pal.bg);
-  if (canvas) buildBackground();
+  if (canvas) { buildSprites(); buildBackground(); }
+}
+
+// the scissors margin around each item takes the theme's paper color
+function buildSprites() {
+  const ppu = view.scale * view.dpr;
+  sprites = TIERS.map((_, i) => buildSprite(i, ppu, pal.rim));
 }
 
 export const view = { cssW: 0, cssH: 0, dpr: 1, scale: 1, ox: 0, oy: 0, quality: 1 };
@@ -71,8 +77,7 @@ export function resize() {
     position: 'absolute', left: view.ox + 'px', top: view.oy + 'px',
     width: view.cssW + 'px', height: view.cssH + 'px',
   });
-  const ppu = view.scale * view.dpr;
-  sprites = TIERS.map((_, i) => buildSprite(i, ppu));
+  buildSprites();
   buildBackground();
 }
 
