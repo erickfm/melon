@@ -19,7 +19,8 @@ Mobile browser drop-and-merge game: `index.html` (HTML/CSS + game-over overlay) 
 - `js/fx.js`: tier-themed bits (`BITS`: seeds, leaves, petals, chunks, confetti) with flutter, additive sparkles and flashes, rings, background color pulses, floating text, banners (fixed y slots: combo 262, fever/melon 330–340, discovery 405), ambient pollen motes pushed by merges, confetti rain
 - `js/audio.js`: Web Audio synth through a compressor. SFX: drop whoosh, landing tok, merge bloop+bell (pitch rises with tier and combo), sub thump for big pieces, fever riser, heartbeat. Generative music (100 BPM, ×1.25 in fever, C pentatonic): pad, bass, soft kick/hats, random-walk marimba. `setMood({fever, danger})` adds layers or closes a low-pass. One mute toggle for everything.
 - `js/haptics.js`: `navigator.vibrate` (Android); iOS 18+ Safari via the hidden `<input switch>` label-click trick. iOS likely only honours it inside user gestures (drop / buttons), so merge haptics may be silent there.
-- localStorage keys: `melon_best`, `melon_discovered` (highest tier ever seen, reveals the chain strip), `melon_muted`, `melon_save_v1`
+- Theme: `THEMES.light/dark` palettes in `js/render.js`, swapped by `setTheme()` (rebuilds the cached background, sets `data-theme` on `<html>` for the CSS overlay vars). Toggled by a bare moon/sun icon under the restart button (`BUTTONS.theme`). Defaults to the system preference until the player picks one; an inline head script applies it before first paint. Item sprites are not themed.
+- localStorage keys: `melon_best`, `melon_discovered` (highest tier ever seen, reveals the chain strip), `melon_muted`, `melon_dark`, `melon_save_v1`
 - Debug: `window.__melon` exposes `{ s, bodies, drop, TIERS, fx, makeBody }` for headless checks
 
 ## Running
@@ -27,6 +28,8 @@ Mobile browser drop-and-merge game: `index.html` (HTML/CSS + game-over overlay) 
 ```bash
 python3 server.py   # http://localhost:8000
 ```
+
+Deployed on GitHub Pages from `main` (repo root, `.nojekyll`), live at https://erickfm.github.io/melon/. Pushing to `main` redeploys. Keep asset paths relative: the site lives under `/melon/`.
 
 `server.py` sends `Cache-Control: no-cache` so iOS Safari revalidates modules.
 

@@ -4,6 +4,10 @@ A mobile browser drop-and-merge game with a paper cutout garden. Drop pieces int
 
 ## Play
 
+**[erickfm.github.io/melon](https://erickfm.github.io/melon/)** (best on a phone, portrait)
+
+Run it locally:
+
 ```bash
 # Local dev (Flask):
 python3 server.py

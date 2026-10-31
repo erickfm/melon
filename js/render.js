@@ -11,11 +11,27 @@ import { TAU, mulberry32, rectPts, tracePoly, getGrain } from './paper.js';
 import { fx, drawFx, drawBackFx, drawBanners } from './fx.js';
 import { beatPhase } from './audio.js';
 
-const BG = '#efe2c3';
-const INK = '#4a3426';
-const INK_SOFT = 'rgba(74,52,38,0.6)';
-const PAPER = '#fbf5e6';
-const SHADOW = 'rgba(60,35,15,0.22)';
+// Light: warm kraft paper by day. Dark: the same cutouts on dusky violet paper at night.
+const THEMES = {
+  light: {
+    bg: '#efe2c3', glow: '255,250,232', glowA: 0.45, ink: '#4a3426', inkSoft: 'rgba(74,52,38,0.6)',
+    inkFaint: '74,52,38', paper: '#fbf5e6', shadow: 'rgba(60,35,15,0.22)', jarBack: '160,110,60', jarBackA: 0.13,
+    wall: '#c08f58', floor: '#b5834d', dash: 'rgba(120,80,40,0.35)', strip: '#f6ead0',
+  },
+  dark: {
+    bg: '#2a2638', glow: '150,140,215', glowA: 0.2, ink: '#efe2c3', inkSoft: 'rgba(239,226,195,0.6)',
+    inkFaint: '239,226,195', paper: '#3d3750', shadow: 'rgba(0,0,0,0.38)', jarBack: '12,8,24', jarBackA: 0.3,
+    wall: '#8d6a4a', floor: '#7f5e40', dash: 'rgba(40,25,15,0.45)', strip: '#38324a',
+  },
+};
+const pal = { ...THEMES.light };
+
+export function setTheme(dark) {
+  Object.assign(pal, THEMES[dark ? 'dark' : 'light']);
+  document.documentElement.dataset.theme = dark ? 'dark' : 'light';
+  document.querySelector('meta[name=theme-color]')?.setAttribute('content', pal.bg);
+  if (canvas) buildBackground();
+}
 
 export const view = { cssW: 0, cssH: 0, dpr: 1, scale: 1, ox: 0, oy: 0, quality: 1 };
 let canvas, ctx, sprites = [], jar = null;
@@ -77,11 +93,11 @@ function buildBackground() {
   bgCache.width = w;
   bgCache.height = h;
   const g = bgCache.getContext('2d');
-  g.fillStyle = BG;
+  g.fillStyle = pal.bg;
   g.fillRect(0, 0, w, h);
   const glow = g.createRadialGradient(w / 2, h * 0.45, 0, w / 2, h * 0.45, Math.max(w, h) * 0.6);
-  glow.addColorStop(0, 'rgba(255,250,232,0.45)');
-  glow.addColorStop(1, 'rgba(255,250,232,0)');
+  glow.addColorStop(0, `rgba(${pal.glow},${pal.glowA})`);
+  glow.addColorStop(1, `rgba(${pal.glow},0)`);
   g.fillStyle = glow;
   g.fillRect(0, 0, w, h);
   g.fillStyle = g.createPattern(getGrain(), 'repeat');
@@ -146,7 +162,7 @@ export function render(s) {
   if (s.current !== null && s.phase === 'play') drawHeld(s, pump);
   if (!s.dropped && s.phase === 'play') {
     ctx.globalAlpha = 0.45 + 0.15 * Math.sin(s.time * 3);
-    text('drag to aim, let go to drop', WORLD_W / 2, 440, 20, 'center', INK);
+    text('drag to aim, let go to drop', WORLD_W / 2, 440, 20, 'center', pal.ink);
     ctx.globalAlpha = 1;
   }
   drawFx(ctx, font);
@@ -182,7 +198,7 @@ export function drawItem(tier, x, y, angle = 0, scale = 1, sq = 0, sqA = 0) {
   ctx.restore();
 }
 
-function text(str, x, y, size, align = 'left', color = INK) {
+function text(str, x, y, size, align = 'left', color = pal.ink) {
   ctx.font = font(size);
   ctx.textAlign = align;
   ctx.textBaseline = 'alphabetic';
@@ -194,7 +210,7 @@ function cutout(pts, color, dx = 2, dy = 3) {
   ctx.save();
   ctx.translate(dx, dy);
   tracePoly(ctx, pts);
-  ctx.fillStyle = SHADOW;
+  ctx.fillStyle = pal.shadow;
   ctx.fill();
   ctx.restore();
   tracePoly(ctx, pts);
@@ -204,18 +220,18 @@ function cutout(pts, color, dx = 2, dy = 3) {
 
 function drawJarBack(s, pump) {
   tracePoly(ctx, jar.back);
-  ctx.fillStyle = s.fever ? `rgba(255,255,255,${0.16 + pump * 0.12})` : `rgba(160,110,60,${0.13 - pump * 0.05})`;
+  ctx.fillStyle = s.fever ? `rgba(255,255,255,${0.16 + pump * 0.12})` : `rgba(${pal.jarBack},${pal.jarBackA - pump * 0.05})`;
   ctx.fill();
 }
 
 function drawJarFront(s, pump) {
-  const wall = s.fever ? `hsl(${(s.time * 90 + 30) % 360},55%,${55 + pump * 12}%)` : '#c08f58';
-  const floor = s.fever ? `hsl(${(s.time * 90 + 50) % 360},50%,${50 + pump * 12}%)` : '#b5834d';
+  const wall = s.fever ? `hsl(${(s.time * 90 + 30) % 360},55%,${55 + pump * 12}%)` : pal.wall;
+  const floor = s.fever ? `hsl(${(s.time * 90 + 50) % 360},50%,${50 + pump * 12}%)` : pal.floor;
   cutout(jar.left, wall);
   cutout(jar.right, wall);
   cutout(jar.floor, floor);
   // corrugation dashes
-  ctx.strokeStyle = 'rgba(120,80,40,0.35)';
+  ctx.strokeStyle = pal.dash;
   ctx.lineWidth = 1.2;
   ctx.setLineDash([3, 9]);
   ctx.beginPath();
@@ -236,7 +252,7 @@ function drawBodies(s) {
     ctx.moveTo(b.x + 1.5 + b.r, b.y + 3);
     ctx.arc(b.x + 1.5, b.y + 3, b.r, 0, TAU);
   }
-  ctx.fillStyle = SHADOW;
+  ctx.fillStyle = pal.shadow;
   ctx.fill();
   // motion trails for fast movers
   for (const b of bodies) {
@@ -269,7 +285,7 @@ function surfaceY(x, bodies) {
 
 function drawGuide(s) {
   const r = TIERS[s.current].r, x = s.heldX, y1 = surfaceY(x, s.bodies);
-  ctx.strokeStyle = s.fever ? `hsla(${(s.time * 200) % 360},80%,50%,0.5)` : 'rgba(74,52,38,0.22)';
+  ctx.strokeStyle = s.fever ? `hsla(${(s.time * 200) % 360},80%,50%,0.5)` : `rgba(${pal.inkFaint},0.22)`;
   ctx.lineWidth = 1.6;
   ctx.setLineDash([4, 7]);
   ctx.lineDashOffset = -s.time * 30;
@@ -280,7 +296,7 @@ function drawGuide(s) {
   ctx.setLineDash([]);
   ctx.lineDashOffset = 0;
   // landing marker
-  ctx.fillStyle = 'rgba(74,52,38,0.25)';
+  ctx.fillStyle = `rgba(${pal.inkFaint},0.25)`;
   ctx.beginPath();
   ctx.ellipse(x, y1, 6, 2.2, 0, 0, TAU);
   ctx.fill();
@@ -294,7 +310,7 @@ function drawHeld(s, pump) {
   const y = DROP_Y - pump * 2.5;
   ctx.beginPath();
   ctx.arc(s.heldX + 1.5, y + 3, r * pop, 0, TAU);
-  ctx.fillStyle = SHADOW;
+  ctx.fillStyle = pal.shadow;
   ctx.fill();
   // stretch sideways with aim speed
   const stretch = Math.max(-0.25, Math.min(0.25, s.heldVel * 0.0006));
@@ -319,24 +335,24 @@ function drawDanger(s) {
 function paperDisc(x, y, r) {
   ctx.beginPath();
   ctx.arc(x + 1.5, y + 2.5, r, 0, TAU);
-  ctx.fillStyle = SHADOW;
+  ctx.fillStyle = pal.shadow;
   ctx.fill();
   ctx.beginPath();
   ctx.arc(x, y, r, 0, TAU);
-  ctx.fillStyle = PAPER;
+  ctx.fillStyle = pal.paper;
   ctx.fill();
 }
 
 function drawHud(s, pump) {
-  text('score', 28, 30, 17, 'left', INK_SOFT);
+  text('score', 28, 30, 17, 'left', pal.inkSoft);
   const punch = 1 + s.scorePunch * 0.35;
   ctx.save();
   ctx.translate(26, 70);
   ctx.scale(punch, punch);
   ctx.rotate(-s.scorePunch * 0.06);
-  text(String(Math.round(s.shownScore)), 0, 0, 42, 'left', s.fever ? `hsl(${(s.time * 300) % 360},70%,40%)` : INK);
+  text(String(Math.round(s.shownScore)), 0, 0, 42, 'left', s.fever ? `hsl(${(s.time * 300) % 360},70%,40%)` : pal.ink);
   ctx.restore();
-  text('best ' + Math.max(s.best, s.score), 28, 94, 17, 'left', INK_SOFT);
+  text('best ' + Math.max(s.best, s.score), 28, 94, 17, 'left', pal.inkSoft);
 
   // combo + fever meters
   if (s.combo >= 2 && s.time - s.lastMerge < s.comboWindow) {
@@ -357,15 +373,15 @@ function drawHud(s, pump) {
     }
   }
 
-  text('next', NEXT.x, 30, 17, 'center', INK_SOFT);
+  text('next', NEXT.x, 30, 17, 'center', pal.inkSoft);
   paperDisc(NEXT.x, NEXT.y, NEXT.r + pump * 1.2);
   drawItem(s.next, NEXT.x, NEXT.y, Math.sin(s.time * 2) * 0.1, Math.min(1, 19 / TIERS[s.next].r));
 
   const { mute, restart } = BUTTONS;
   paperDisc(mute.x, mute.y, mute.r);
   paperDisc(restart.x, restart.y, restart.r);
-  ctx.strokeStyle = INK;
-  ctx.fillStyle = INK;
+  ctx.strokeStyle = pal.ink;
+  ctx.fillStyle = pal.ink;
   ctx.lineWidth = 2.4;
   ctx.lineCap = 'round';
   ctx.lineJoin = 'round';
@@ -400,10 +416,11 @@ function drawHud(s, pump) {
     ctx.arc(mute.x + 2, mute.y, 9, -0.9, 0.9);
   }
   ctx.stroke();
+  drawThemeIcon(s.dark);
   if (s.restartArmed > 0) text('tap again', restart.x - 4, restart.y + 36, 15, 'right', '#c0453b');
 
   // growth chain
-  cutout(jar.strip, '#f6ead0', 1.5, 2.5);
+  cutout(jar.strip, pal.strip, 1.5, 2.5);
   const step = (JAR.right - JAR.left) / TIERS.length;
   TIERS.forEach((t, i) => {
     const cx = JAR.left + step * (i + 0.5), ir = 7 + i * 0.95;
@@ -414,9 +431,41 @@ function drawHud(s, pump) {
     } else {
       ctx.beginPath();
       ctx.arc(cx, CHAIN_Y, ir, 0, TAU);
-      ctx.fillStyle = 'rgba(74,52,38,0.14)';
+      ctx.fillStyle = `rgba(${pal.inkFaint},0.14)`;
       ctx.fill();
-      text('?', cx, CHAIN_Y + 5, 15, 'center', 'rgba(74,52,38,0.4)');
+      text('?', cx, CHAIN_Y + 5, 15, 'center', `rgba(${pal.inkFaint},0.4)`);
     }
   });
+}
+
+// Bare icon, no paper disc: a crescent by day (tap for night), a small sun at night.
+function drawThemeIcon(dark) {
+  const { x, y } = BUTTONS.theme;
+  ctx.save();
+  ctx.globalAlpha = 0.45;
+  ctx.fillStyle = ctx.strokeStyle = pal.ink;
+  if (dark) {
+    ctx.beginPath();
+    ctx.arc(x, y, 3.6, 0, TAU);
+    ctx.fill();
+    ctx.lineWidth = 1.6;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < 8; i++) {
+      const a = (i * TAU) / 8, c = Math.cos(a), sn = Math.sin(a);
+      ctx.moveTo(x + c * 6, y + sn * 6);
+      ctx.lineTo(x + c * 8.2, y + sn * 8.2);
+    }
+    ctx.stroke();
+  } else {
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, TAU);
+    ctx.clip();
+    ctx.beginPath();
+    ctx.arc(x, y, 7, 0, TAU);
+    ctx.moveTo(x + 10, y - 3);
+    ctx.arc(x + 4, y - 3, 6, 0, TAU);
+    ctx.fill('evenodd');
+  }
+  ctx.restore();
 }

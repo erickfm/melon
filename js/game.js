@@ -16,7 +16,7 @@ import {
   playCombo, playHeartbeat, playOver, playUi,
 } from './audio.js';
 import { haptic } from './haptics.js';
-import { initRender, resize, render, toWorld, adaptQuality } from './render.js';
+import { initRender, resize, render, toWorld, adaptQuality, setTheme } from './render.js';
 
 const canvas = document.getElementById('game');
 const overEl = document.getElementById('over');
@@ -57,6 +57,7 @@ const s = {
   best: store.get('melon_best', 0),
   discovered: store.get('melon_discovered', SPAWN_WEIGHTS.length - 1),
   muted: store.get('melon_muted', false),
+  dark: store.get('melon_dark', matchMedia('(prefers-color-scheme: dark)').matches),
   current: 0,
   next: 0,
   aimX: WORLD_W / 2,
@@ -85,6 +86,7 @@ const s = {
   chainFlash: [],
 };
 setMuted(s.muted);
+setTheme(s.dark);
 
 function roll() {
   let r = Math.random() * SPAWN_WEIGHTS.reduce((a, b) => a + b);
@@ -371,6 +373,10 @@ function press(name) {
     s.muted = !s.muted;
     setMuted(s.muted);
     store.set('melon_muted', s.muted);
+  } else if (name === 'theme') {
+    s.dark = !s.dark;
+    setTheme(s.dark);
+    store.set('melon_dark', s.dark);
   } else if (name === 'restart') {
     if (s.phase !== 'play' || !s.dropped || s.restartArmed > 0) newGame();
     else s.restartArmed = 2;
