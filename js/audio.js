@@ -75,7 +75,9 @@ function hiss(t0, dur, vol, freq = 2500, { type = 'bandpass', q = 0.8, bus = sfx
   src.stop(t0 + dur + 0.05);
 }
 
-const ready = () => ac && !muted;
+let quiet = false;  // replays run silent (music keeps going)
+export function setQuiet(q) { quiet = q; }
+const ready = () => ac && !muted && !quiet;
 
 // --- sound effects ---
 
@@ -149,7 +151,7 @@ export function playOver() {
 }
 
 export function playUi() {
-  if (!ready()) return;
+  if (!ac || muted) return;
   tone(880, ac.currentTime, 0.06, { type: 'sine', vol: 0.08 });
 }
 

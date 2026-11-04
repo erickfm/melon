@@ -20,7 +20,7 @@
   </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='54' r='42' fill='%23cdb86c' stroke='%23fbf5e6' stroke-width='5'/><path d='M50 12 q4 -8 12 -8' stroke='%237a6630' stroke-width='6' fill='none'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Patrick+Hand&display=swap">
   <link rel="modulepreload" href="js/constants.js">
   <link rel="modulepreload" href="js/paper.js">
   <link rel="modulepreload" href="js/items.js">
@@ -29,6 +29,10 @@
   <link rel="modulepreload" href="js/audio.js">
   <link rel="modulepreload" href="js/haptics.js">
   <link rel="modulepreload" href="js/render.js">
+  <link rel="modulepreload" href="js/run.js">
+  <link rel="modulepreload" href="js/net.js">
+  <link rel="modulepreload" href="js/es.js">
+  <link rel="modulepreload" href="js/es-story.js">
   <link rel="modulepreload" href="js/game.js">
   <style>
     :root {
@@ -65,7 +69,7 @@
       height: 100%;
       overflow: hidden;
       background: var(--bg);
-      font-family: 'Gaegu', 'Comic Sans MS', sans-serif;
+      font-family: 'Gaegu', 'Patrick Hand', 'Comic Sans MS', sans-serif;
       color: var(--ink);
     }
 
@@ -127,7 +131,7 @@
 
     button {
       margin-top: 18px;
-      font: 700 26px 'Gaegu', 'Comic Sans MS', sans-serif;
+      font: 700 26px 'Gaegu', 'Patrick Hand', 'Comic Sans MS', sans-serif;
       color: var(--cream);
       background: var(--accent);
       border: none;
@@ -141,6 +145,191 @@
       transform: rotate(1deg) translate(2px, 3px);
       box-shadow: 0 1px 0 rgba(60, 35, 15, 0.25);
     }
+    [hidden] { display: none !important; }
+
+    .vs {
+      font-size: 21px;
+      font-weight: 700;
+      margin-top: 6px;
+    }
+    .actions {
+      display: flex;
+      gap: 10px;
+      justify-content: center;
+      flex-wrap: wrap;
+      margin-top: 12px;
+    }
+    button.ghost {
+      margin-top: 0;
+      font-size: 19px;
+      padding: 3px 14px 5px;
+      color: var(--ink);
+      background: transparent;
+      box-shadow: inset 0 0 0 2px var(--ink-soft);
+      transform: rotate(-1deg);
+    }
+    button.ghost:active {
+      transform: rotate(-1deg) translate(1px, 2px);
+      box-shadow: inset 0 0 0 2px var(--ink-soft);
+    }
+    .who {
+      margin-top: 14px;
+      font-size: 16px;
+      color: var(--ink-soft);
+      cursor: pointer;
+    }
+    .who i { font-style: normal; }
+    .who span {
+      text-decoration: underline dotted;
+      text-underline-offset: 3px;
+    }
+
+    .rank { min-height: 1.2em; }
+
+    #board .card {
+      width: min(330px, calc(100vw - 32px));
+      padding: 18px 18px 16px;
+      transform: rotate(1deg);
+    }
+    #board.hidden .card { transform: rotate(1deg) scale(0.92); }
+    .tabs {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+    .tabs button { margin-top: 0; }
+    .tabs button.on {
+      background: var(--ink);
+      color: var(--paper);
+      box-shadow: none;
+    }
+    #board-list {
+      list-style: none;
+      margin: 12px 0 4px;
+      max-height: min(52vh, 420px);
+      overflow-y: auto;
+      text-align: left;
+      font-size: 20px;
+    }
+    #board-list li {
+      display: flex;
+      align-items: baseline;
+      gap: 8px;
+      padding: 4px 6px;
+      border-radius: 8px;
+      cursor: pointer;
+    }
+    #board-list li:active { background: var(--scrim); }
+    #board-list li.me { color: var(--accent); font-weight: 700; }
+    #board-list .rk { width: 2.2em; text-align: right; color: var(--ink-soft); }
+    #board-list .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #board-list .sc { font-weight: 700; }
+    #board-list .pl { font-size: 13px; color: var(--ink-soft); }
+    #board-close { margin-top: 12px; }
+    #board-list .empty { justify-content: center; color: var(--ink-soft); cursor: default; }
+
+    .postcard {
+      width: min(340px, calc(100vw - 32px));
+      text-align: left;
+      padding: 18px 20px 14px;
+      transform: rotate(1.2deg);
+      background:
+        repeating-linear-gradient(transparent 0 33px, rgba(120, 90, 60, 0.12) 33px 34px) 0 54px / 100% calc(100% - 140px) no-repeat,
+        var(--paper);
+    }
+    #postcard.hidden .postcard { transform: rotate(1.2deg) scale(0.92); }
+    .pc-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .pc-from {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+    .stamp {
+      width: 38px;
+      height: 46px;
+      background: radial-gradient(circle at 50% 45%, #f7c948 0 9px, #8d5b38 9px 12px, transparent 12px), #6dbb4c;
+      border: 3px dotted var(--paper);
+      outline: 2px solid #6dbb4c;
+      transform: rotate(6deg);
+    }
+    .pc-text {
+      font-size: 25px;
+      line-height: 34px;
+      margin: 12px 0 6px;
+    }
+    .pc-text .w {
+      cursor: pointer;
+      border-radius: 4px;
+    }
+    .pc-text .w.seen {
+      text-decoration: underline dotted var(--ink-soft);
+      text-underline-offset: 4px;
+    }
+    .pc-text .w.on {
+      background: #f7c94866;
+    }
+    .pc-gloss {
+      min-height: 1.4em;
+      font-size: 19px;
+      color: var(--ink-soft);
+    }
+    .pc-gloss b { color: var(--ink); }
+    .pc-en {
+      font-size: 18px;
+      line-height: 1.25;
+      color: var(--ink-soft);
+      margin-top: 6px;
+    }
+    .postcard .actions { justify-content: flex-start; }
+    #pc-next { display: block; margin: 14px auto 0; }
+    .pc-foot {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 6px;
+      margin-top: 8px;
+      font-size: 16px;
+      color: var(--ink-soft);
+    }
+    button.pc-arrow {
+      margin: 0;
+      padding: 0 10px 2px;
+      font-size: 24px;
+      line-height: 1;
+      background: none;
+      box-shadow: none;
+      color: var(--ink);
+      transform: none;
+    }
+    button.pc-arrow:disabled { opacity: 0.2; }
+    .pc-words {
+      text-align: center;
+      font-size: 15px;
+    }
+
+    #toast {
+      position: fixed;
+      left: 50%;
+      bottom: calc(40px + env(safe-area-inset-bottom));
+      transform: translate(-50%, 20px);
+      background: var(--ink);
+      color: var(--bg);
+      font-size: 20px;
+      font-weight: 700;
+      padding: 4px 16px 6px;
+      border-radius: 10px 13px 9px 12px;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s, transform 0.2s;
+    }
+    #toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
   </style>
 </head>
 <body>
@@ -148,14 +337,57 @@
 
   <div id="over" class="overlay hidden">
     <div class="card">
-      <div class="title">jar's full!</div>
-      <div class="label">score</div>
+      <div class="title" id="over-title">jar's full!</div>
+      <div class="label" data-es="puntos">score</div>
       <div class="big" id="over-score">0</div>
       <div class="row" id="over-best"></div>
       <div class="row" id="over-biggest"></div>
-      <button id="again">again</button>
+      <div class="vs" id="over-vs" hidden></div>
+      <div class="row rank" id="over-rank"></div>
+      <button id="again" data-es="otra vez">again</button>
+      <div class="actions">
+        <button class="ghost" id="watch" data-es="▶ repetir">▶ replay</button>
+        <button class="ghost" id="share">challenge</button>
+        <button class="ghost" id="watch-them" hidden></button>
+        <button class="ghost" id="open-board" data-es="🏆 tabla">🏆 board</button>
+      </div>
+      <div class="who"><i data-es="juegas como">playing as</i> <span id="who"></span> ✎</div>
     </div>
   </div>
+  <div id="board" class="overlay hidden">
+    <div class="card">
+      <div class="tabs">
+        <button class="ghost on" data-b="day" data-es="hoy">today</button>
+        <button class="ghost" data-b="all" data-es="histórico">all time</button>
+      </div>
+      <ol id="board-list"></ol>
+      <div class="row" id="board-me"></div>
+      <button class="ghost" id="board-close" data-es="volver">back</button>
+    </div>
+  </div>
+  <div id="postcard" class="overlay hidden">
+    <div class="card postcard">
+      <div class="pc-head">
+        <span class="pc-from" id="pc-from"></span>
+        <span class="stamp" aria-hidden="true"></span>
+      </div>
+      <p class="pc-text" id="pc-text" lang="es"></p>
+      <div class="pc-gloss" id="pc-gloss"></div>
+      <p class="pc-en" id="pc-en" hidden></p>
+      <div class="actions">
+        <button class="ghost" id="pc-say">🔊 escuchar</button>
+        <button class="ghost" id="pc-tr">inglés</button>
+      </div>
+      <button id="pc-next">seguir</button>
+      <div class="pc-foot">
+        <button class="pc-arrow" id="pc-prev" aria-label="anterior">‹</button>
+        <span id="pc-n"></span>
+        <button class="pc-arrow" id="pc-fwd" aria-label="siguiente">›</button>
+      </div>
+      <div class="label pc-words" id="pc-words"></div>
+    </div>
+  </div>
+  <div id="toast"></div>
 
   <script type="module" src="js/game.js"></script>
 </body>

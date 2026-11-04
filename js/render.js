@@ -10,6 +10,7 @@ import { TIERS, buildSprite } from './items.js';
 import { TAU, mulberry32, rectPts, tracePoly, getGrain } from './paper.js';
 import { fx, drawFx, drawBackFx, drawBanners } from './fx.js';
 import { beatPhase } from './audio.js';
+import { L, es } from './es.js';
 
 // Light: warm kraft paper by day. Dark: the same cutouts on dusky violet paper at night.
 const THEMES = {
@@ -45,7 +46,8 @@ let bgCache = null;
 
 const MAX_PIXELS = 2.6e6;  // device-pixel budget for the canvas
 
-export const font = size => `700 ${size}px Gaegu, 'Comic Sans MS', sans-serif`;
+// Gaegu has no accented letters; Patrick Hand fills in á é í ó ú ñ ¡ ¿ (Spanish mode)
+export const font = size => `700 ${size}px Gaegu, 'Patrick Hand', 'Comic Sans MS', sans-serif`;
 
 export function initRender(c) {
   canvas = c;
@@ -160,14 +162,14 @@ export function render(s) {
 
   drawBackFx(ctx, s.fever, s.time, beat);
   drawJarBack(s, pump);
-  if (s.phase === 'play' && s.current !== null) drawGuide(s);
+  if (s.phase !== 'over' && s.current !== null) drawGuide(s);
   drawBodies(s);
   drawJarFront(s, pump);
   drawDanger(s);
-  if (s.current !== null && s.phase === 'play') drawHeld(s, pump);
+  if (s.current !== null && s.phase !== 'over') drawHeld(s, pump);
   if (!s.dropped && s.phase === 'play') {
     ctx.globalAlpha = 0.45 + 0.15 * Math.sin(s.time * 3);
-    text('drag to aim, let go to drop', WORLD_W / 2, 440, 20, 'center', pal.ink);
+    text(L('drag to aim, let go to drop', 'arrastra para apuntar, suelta para soltar'), WORLD_W / 2, 440, 20, 'center', pal.ink);
     ctx.globalAlpha = 1;
   }
   drawFx(ctx, font);
@@ -176,7 +178,7 @@ export function render(s) {
 
   // --- screen space overlays ---
   ctx.setTransform(1, 0, 0, 1, 0, 0);
-  if (s.near > 0.35 && s.phase === 'play') {
+  if (s.near > 0.35 && s.phase !== 'over') {
     ctx.globalAlpha = Math.min(1, (s.near - 0.35) / 0.65 * (0.25 + 0.2 * Math.sin(s.time * (s.overflow > 0 ? 14 : 5)) ** 2) + (s.overflow > 0 ? 0.15 : 0));
     drawVignette(W, H);
     ctx.globalAlpha = 1;
@@ -349,7 +351,7 @@ function paperDisc(x, y, r) {
 }
 
 function drawHud(s, pump) {
-  text('score', 28, 30, 17, 'left', pal.inkSoft);
+  text(L('score', 'puntos'), 28, 30, 17, 'left', pal.inkSoft);
   const punch = 1 + s.scorePunch * 0.35;
   ctx.save();
   ctx.translate(26, 70);
@@ -357,7 +359,27 @@ function drawHud(s, pump) {
   ctx.rotate(-s.scorePunch * 0.06);
   text(String(Math.round(s.shownScore)), 0, 0, 42, 'left', s.fever ? `hsl(${(s.time * 300) % 360},70%,40%)` : pal.ink);
   ctx.restore();
-  text('best ' + Math.max(s.best, s.score), 28, 94, 17, 'left', pal.inkSoft);
+  text(L('best ', 'récord ') + (s.phase === 'play' ? Math.max(s.best, s.score) : s.best), 28, 94, 17, 'left', pal.inkSoft);
+
+  // challenge: their score at the same drop count, and how far ahead you are
+  if (s.vs && s.phase === 'play') {
+    const v = s.vs, d = s.log.length;
+    const diff = s.score - (d < v.marks.length ? v.marks[d] : v.score);
+    const label = 'vs ' + v.name + ' ';
+    text(label, 28, 122, 15, 'left', pal.inkSoft);
+    const w = ctx.measureText(label).width;
+    text((diff >= 0 ? '+' : '') + diff, 28 + w, 122, 17, 'left', diff >= 0 ? '#4f9a4a' : '#c0453b');
+  }
+
+  // replay: whose run, progress along the top of the jar
+  if (s.phase === 'replay' && s.replay) {
+    const r = s.replay, p = Math.min(1, s.tick / Math.max(1, r.run.end)), w = JAR.right - JAR.left;
+    text('▶ ' + r.label + '  ·  ' + L('tap to skip', 'toca para saltar'), WORLD_W / 2, 180, 16, 'center', pal.inkSoft);
+    ctx.fillStyle = `rgba(${pal.inkFaint},0.15)`;
+    ctx.fillRect(JAR.left, 188, w, 3);
+    ctx.fillStyle = '#c0453b';
+    ctx.fillRect(JAR.left, 188, w * p, 3);
+  }
 
   // combo + fever meters
   if (s.combo >= 2 && s.time - s.lastMerge < s.comboWindow) {
@@ -370,7 +392,7 @@ function drawHud(s, pump) {
   }
   if (s.fever) {
     const left = s.feverT / s.feverMax;
-    text('FEVER', 150, 100, 18, 'left', `hsl(${(s.time * 400) % 360},85%,48%)`);
+    text(L('FEVER', 'FIEBRE'), 150, 100, 18, 'left', `hsl(${(s.time * 400) % 360},85%,48%)`);
     for (let i = 0; i < 20; i++) {
       if (i / 20 > left) break;
       ctx.fillStyle = `hsl(${(i * 18 + s.time * 300) % 360},85%,60%)`;
@@ -378,7 +400,7 @@ function drawHud(s, pump) {
     }
   }
 
-  text('next', NEXT.x, 30, 17, 'center', pal.inkSoft);
+  text(L('next', 'sigue'), NEXT.x, 30, 17, 'center', pal.inkSoft);
   paperDisc(NEXT.x, NEXT.y, NEXT.r + pump * 1.2);
   drawItem(s.next, NEXT.x, NEXT.y, Math.sin(s.time * 2) * 0.1, Math.min(1, 19 / TIERS[s.next].r));
 
@@ -422,7 +444,8 @@ function drawHud(s, pump) {
   }
   ctx.stroke();
   drawThemeIcon(s.dark);
-  if (s.restartArmed > 0) text('tap again', restart.x - 4, restart.y + 36, 15, 'right', '#c0453b');
+  drawLangIcon();
+  if (s.restartArmed > 0) text(L('tap again', 'otra vez'), restart.x - 4, restart.y + 36, 15, 'right', '#c0453b');
 
   // growth chain
   cutout(jar.strip, pal.strip, 1.5, 2.5);
@@ -441,6 +464,14 @@ function drawHud(s, pump) {
       text('?', cx, CHAIN_Y + 5, 15, 'center', `rgba(${pal.inkFaint},0.4)`);
     }
   });
+}
+
+// Bare "ñ": faint when off, in the accent color when Spanish mode is on.
+function drawLangIcon() {
+  const { x, y } = BUTTONS.lang;
+  ctx.globalAlpha = es() ? 0.95 : 0.45;
+  text('ñ', x, y + 6, 22, 'center', es() ? '#c0453b' : pal.ink);
+  ctx.globalAlpha = 1;
 }
 
 // Bare icon, no paper disc: a crescent by day (tap for night), a small sun at night.

@@ -22,5 +22,6 @@ export const BUTTONS = {
   mute: { x: 318, y: 40, r: 17 },
   restart: { x: 362, y: 40, r: 17 },
   theme: { x: 362, y: 90, r: 10 },  // bare icon under restart
+  lang: { x: 330, y: 90, r: 10 },   // bare "ñ": Spanish mode
 };
 export const CHAIN_Y = 730;

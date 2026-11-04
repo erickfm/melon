@@ -24,7 +24,13 @@ const MAX_UP = 520;         // units/s; caps hops from shockwaves and squeezes
 export const bodies = [];
 let lastH = 0;
 
-const easeOutBack = t => 1 + 2.70158 * (t - 1) ** 3 + 1.70158 * (t - 1) ** 2;
+// Replays must come out bit-identical on every browser, so the sim sticks to
+// + - * / and sqrt, which IEEE rounds exactly (pow, trig and friends vary by engine).
+const easeOutBack = t => { const u = t - 1; return 1 + 2.70158 * u * u * u + 1.70158 * u * u; };
+
+// Step-size memory for the slow-mo velocity rescale; part of the saved state.
+export const getLastH = () => lastH;
+export function resetPhysics(h = 0) { lastH = h; }
 
 export function makeBody(tier, x, y, { r0, vx = 0, vy = 0, angle = 0 } = {}) {
   const R = TIERS[tier].r;
@@ -42,7 +48,7 @@ export function makeBody(tier, x, y, { r0, vx = 0, vy = 0, angle = 0 } = {}) {
 export function shockwave(x, y, radius, strength, skip) {
   for (const b of bodies) {
     if (b === skip || b.dead) continue;
-    const dx = b.x - x, dy = b.y - y, d = Math.hypot(dx, dy) || 1;
+    const dx = b.x - x, dy = b.y - y, d = Math.sqrt(dx * dx + dy * dy) || 1;
     if (d > radius + b.r) continue;
     const f = strength * (1 - Math.max(0, d - b.r) / radius) * Math.min(1, 900 / b.m + 0.35);
     b.px -= (dx / d) * f;
@@ -81,7 +87,7 @@ export const perSecond = v => (lastH ? v / lastH : 0);
 function integrate(h, g) {
   for (const b of bodies) {
     let vx = (b.x - b.px) * DAMP, vy = (b.y - b.py) * DAMP;
-    const sp = Math.hypot(vx, vy);
+    const sp = Math.sqrt(vx * vx + vy * vy);
     if (sp > MAX_V) { vx *= MAX_V / sp; vy *= MAX_V / sp; }
     if (vy < -MAX_UP * h) vy = -MAX_UP * h;
     b.px = b.x; b.py = b.y;
