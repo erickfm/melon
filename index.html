@@ -20,7 +20,7 @@
   </script>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='54' r='42' fill='%23cdb86c' stroke='%23fbf5e6' stroke-width='5'/><path d='M50 12 q4 -8 12 -8' stroke='%237a6630' stroke-width='6' fill='none'/></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gaegu:wght@400;700&family=Patrick+Hand&display=swap">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Mali:wght@400;500;600;700&display=swap">
   <link rel="modulepreload" href="js/constants.js">
   <link rel="modulepreload" href="js/paper.js">
   <link rel="modulepreload" href="js/items.js">
@@ -32,7 +32,7 @@
   <link rel="modulepreload" href="js/run.js">
   <link rel="modulepreload" href="js/net.js">
   <link rel="modulepreload" href="js/es.js">
-  <link rel="modulepreload" href="js/es-story.js">
+  <link rel="modulepreload" href="js/es-lessons.js">
   <link rel="modulepreload" href="js/game.js">
   <style>
     :root {
@@ -69,7 +69,7 @@
       height: 100%;
       overflow: hidden;
       background: var(--bg);
-      font-family: 'Gaegu', 'Patrick Hand', 'Comic Sans MS', sans-serif;
+      font-family: 'Mali', 'Comic Sans MS', sans-serif;
       color: var(--ink);
     }
 
@@ -105,22 +105,22 @@
     .card { transition: transform 0.25s cubic-bezier(.3, 1.6, .5, 1); }
 
     .title {
-      font-size: 38px;
+      font-size: 30px;
       font-weight: 700;
       line-height: 1;
       margin-bottom: 14px;
     }
     .label {
-      font-size: 18px;
+      font-size: 14px;
       color: var(--ink-soft);
     }
     .big {
-      font-size: 64px;
+      font-size: 51px;
       font-weight: 700;
       line-height: 0.95;
     }
     .row {
-      font-size: 20px;
+      font-size: 16px;
       color: var(--ink-soft);
       margin-top: 4px;
     }
@@ -131,7 +131,7 @@
 
     button {
       margin-top: 18px;
-      font: 700 26px 'Gaegu', 'Patrick Hand', 'Comic Sans MS', sans-serif;
+      font: 700 21px 'Mali', 'Comic Sans MS', sans-serif;
       color: var(--cream);
       background: var(--accent);
       border: none;
@@ -148,7 +148,7 @@
     [hidden] { display: none !important; }
 
     .vs {
-      font-size: 21px;
+      font-size: 17px;
       font-weight: 700;
       margin-top: 6px;
     }
@@ -161,7 +161,7 @@
     }
     button.ghost {
       margin-top: 0;
-      font-size: 19px;
+      font-size: 15px;
       padding: 3px 14px 5px;
       color: var(--ink);
       background: transparent;
@@ -174,7 +174,7 @@
     }
     .who {
       margin-top: 14px;
-      font-size: 16px;
+      font-size: 13px;
       color: var(--ink-soft);
       cursor: pointer;
     }
@@ -209,7 +209,7 @@
       max-height: min(52vh, 420px);
       overflow-y: auto;
       text-align: left;
-      font-size: 20px;
+      font-size: 16px;
     }
     #board-list li {
       display: flex;
@@ -224,92 +224,132 @@
     #board-list .rk { width: 2.2em; text-align: right; color: var(--ink-soft); }
     #board-list .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #board-list .sc { font-weight: 700; }
-    #board-list .pl { font-size: 13px; color: var(--ink-soft); }
+    #board-list .pl { font-size: 10px; color: var(--ink-soft); }
     #board-close { margin-top: 12px; }
     #board-list .empty { justify-content: center; color: var(--ink-soft); cursor: default; }
 
-    .postcard {
-      width: min(340px, calc(100vw - 32px));
+    #lesson .card {
+      width: min(350px, calc(100vw - 24px));
+      max-height: calc(100vh - 32px);
+      overflow-y: auto;
       text-align: left;
-      padding: 18px 20px 14px;
-      transform: rotate(1.2deg);
-      background:
-        repeating-linear-gradient(transparent 0 33px, rgba(120, 90, 60, 0.12) 33px 34px) 0 54px / 100% calc(100% - 140px) no-repeat,
-        var(--paper);
+      padding: 16px 16px 12px;
+      transform: rotate(0.8deg);
     }
-    #postcard.hidden .postcard { transform: rotate(1.2deg) scale(0.92); }
-    .pc-head {
+    #lesson.hidden .card { transform: rotate(0.8deg) scale(0.92); }
+    .ls-head {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .pc-from {
-      font-size: 22px;
+      align-items: baseline;
+      gap: 8px;
+      font-size: 18px;
       font-weight: 700;
-      color: var(--accent);
     }
-    .stamp {
-      width: 38px;
-      height: 46px;
-      background: radial-gradient(circle at 50% 45%, #f7c948 0 9px, #8d5b38 9px 12px, transparent 12px), #6dbb4c;
-      border: 3px dotted var(--paper);
-      outline: 2px solid #6dbb4c;
-      transform: rotate(6deg);
+    .ls-head small {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--ink-soft);
     }
-    .pc-text {
-      font-size: 25px;
-      line-height: 34px;
-      margin: 12px 0 6px;
+    #ls-lines { margin: 10px 0 4px; }
+    .ln {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin: 7px 0;
     }
-    .pc-text .w {
+    .ln.me { flex-direction: row-reverse; }
+    .ln button.who {
+      margin: 3px 0 0;
+      padding: 1px 7px 2px;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--ink-soft);
+      background: none;
+      box-shadow: inset 0 0 0 1.5px var(--ink-soft);
+      border-radius: 9px;
+      transform: none;
+      flex-shrink: 0;
+    }
+    .bubble {
+      background: var(--scrim);
+      border-radius: 4px 13px 13px 13px;
+      padding: 5px 10px 6px;
+      max-width: 82%;
+    }
+    .ln.me .bubble {
+      background: rgba(192, 69, 59, 0.13);
+      border-radius: 13px 4px 13px 13px;
+    }
+    .bubble p {
+      font-size: 18px;
+      line-height: 1.3;
+    }
+    .bubble p.tr {
+      display: none;
+      font-size: 13px;
+      color: var(--ink-soft);
+      margin-top: 1px;
+    }
+    #lesson.english .bubble p.tr { display: block; }
+    #lesson .w {
       cursor: pointer;
       border-radius: 4px;
     }
-    .pc-text .w.seen {
+    #lesson .w.seen {
       text-decoration: underline dotted var(--ink-soft);
-      text-underline-offset: 4px;
+      text-underline-offset: 3px;
     }
-    .pc-text .w.on {
-      background: #f7c94866;
+    #lesson .w.key { font-weight: 700; }
+    #lesson .w.on { background: #f7c94877; }
+    .ls-phrase {
+      margin-top: 10px;
+      padding: 8px 12px 9px;
+      border-radius: 10px 14px 9px 13px;
+      box-shadow: inset 0 0 0 2px var(--gold);
+      text-align: center;
     }
-    .pc-gloss {
-      min-height: 1.4em;
-      font-size: 19px;
+    .ls-phrase .label {
+      font-size: 12px;
+      color: var(--gold);
+      font-weight: 600;
+    }
+    #ls-phrase {
+      font-size: 21px;
+      font-weight: 700;
+    }
+    #ls-phrase-en {
+      font-size: 14px;
       color: var(--ink-soft);
     }
-    .pc-gloss b { color: var(--ink); }
-    .pc-en {
-      font-size: 18px;
-      line-height: 1.25;
-      color: var(--ink-soft);
+    .ls-gloss {
+      min-height: 1.5em;
       margin-top: 6px;
+      font-size: 14px;
+      color: var(--ink-soft);
+      text-align: center;
     }
-    .postcard .actions { justify-content: flex-start; }
-    #pc-next { display: block; margin: 14px auto 0; }
-    .pc-foot {
+    .ls-gloss b { color: var(--ink); }
+    #lesson .actions { margin-top: 6px; }
+    #ls-next { display: block; margin: 10px auto 0; }
+    .ls-foot {
       display: flex;
       justify-content: center;
       align-items: center;
       gap: 6px;
-      margin-top: 8px;
-      font-size: 16px;
+      margin-top: 6px;
+      font-size: 13px;
       color: var(--ink-soft);
     }
-    button.pc-arrow {
+    button.ls-arrow {
       margin: 0;
       padding: 0 10px 2px;
-      font-size: 24px;
+      font-size: 20px;
       line-height: 1;
       background: none;
       box-shadow: none;
       color: var(--ink);
       transform: none;
     }
-    button.pc-arrow:disabled { opacity: 0.2; }
-    .pc-words {
-      text-align: center;
-      font-size: 15px;
-    }
+    button.ls-arrow:disabled { opacity: 0.2; }
 
     #toast {
       position: fixed;
@@ -318,7 +358,7 @@
       transform: translate(-50%, 20px);
       background: var(--ink);
       color: var(--bg);
-      font-size: 20px;
+      font-size: 16px;
       font-weight: 700;
       padding: 4px 16px 6px;
       border-radius: 10px 13px 9px 12px;
@@ -365,26 +405,26 @@
       <button class="ghost" id="board-close" data-es="volver">back</button>
     </div>
   </div>
-  <div id="postcard" class="overlay hidden">
-    <div class="card postcard">
-      <div class="pc-head">
-        <span class="pc-from" id="pc-from"></span>
-        <span class="stamp" aria-hidden="true"></span>
+  <div id="lesson" class="overlay hidden">
+    <div class="card">
+      <div class="ls-head"><span id="ls-scene"></span><small id="ls-scene-en"></small></div>
+      <div id="ls-lines"></div>
+      <div class="ls-phrase">
+        <div class="label">★ frase nueva</div>
+        <div id="ls-phrase" lang="es"></div>
+        <div id="ls-phrase-en"></div>
       </div>
-      <p class="pc-text" id="pc-text" lang="es"></p>
-      <div class="pc-gloss" id="pc-gloss"></div>
-      <p class="pc-en" id="pc-en" hidden></p>
+      <div class="ls-gloss" id="ls-gloss"></div>
       <div class="actions">
-        <button class="ghost" id="pc-say">🔊 escuchar</button>
-        <button class="ghost" id="pc-tr">inglés</button>
+        <button class="ghost" id="ls-say">🔊 escuchar</button>
+        <button class="ghost" id="ls-tr">inglés</button>
       </div>
-      <button id="pc-next">seguir</button>
-      <div class="pc-foot">
-        <button class="pc-arrow" id="pc-prev" aria-label="anterior">‹</button>
-        <span id="pc-n"></span>
-        <button class="pc-arrow" id="pc-fwd" aria-label="siguiente">›</button>
+      <button id="ls-next">seguir</button>
+      <div class="ls-foot">
+        <button class="ls-arrow" id="ls-prev" aria-label="anterior">‹</button>
+        <span id="ls-n"></span>
+        <button class="ls-arrow" id="ls-fwd" aria-label="siguiente">›</button>
       </div>
-      <div class="label pc-words" id="pc-words"></div>
     </div>
   </div>
   <div id="toast"></div>

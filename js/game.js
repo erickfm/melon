@@ -26,8 +26,8 @@ import { initRender, resize, render, toWorld, adaptQuality, setTheme } from './r
 import { encodeRun, decodeRun, randomName, cleanName } from './run.js';
 import { submitRun, flushPending, fetchBoard, fetchRun } from './net.js';
 import {
-  L, es, tierName, withArticle, isFem, numberWord, say, setSpanish, initSpanish, initPostcards,
-  hasPostcard, showPostcard, unlockVoice, setVoiceMuted,
+  L, es, tierName, withArticle, isFem, numberWord, praise, say, setSpanish, initSpanish, initLessons,
+  hasLesson, showLesson, unlockVoice, setVoiceMuted,
 } from './es.js';
 
 const canvas = document.getElementById('game');
@@ -256,7 +256,7 @@ function onMerge(a, b) {
   if (t >= 7) s.slowT = Math.max(s.slowT, 0.45 + (t - 7) * 0.2);
   buzz(t >= 6 ? 2 : t >= 3 ? 1 : 0);
 
-  if (t >= 4) speak(withArticle(t), 1);
+  if (t >= 6) speak(praise(), 1);
   if (s.combo >= 2) {
     banner(s.combo >= 4 ? `combo ×${s.combo}!!` : `combo ×${s.combo}`, 26 + Math.min(s.combo, 6) * 3, '#c0453b', 262, 0.9);
     speak(`¡${numberWord(s.combo)}!`, 2);
@@ -265,7 +265,6 @@ function onMerge(a, b) {
   if (t > s.discovered && s.phase === 'play') {
     s.discovered = t;
     store.set('melon_discovered', t);
-    speak(withArticle(t), 4);
     banner(L('new: ' + TIERS[t].name + '!', `¡${isFem(t) ? 'nueva' : 'nuevo'}: ${withArticle(t)}!`), 32, TIERS[t].color === '#fffaf0' ? '#4a3426' : TIERS[t].color, 405, 1.6);
     rain(40, [TIERS[t].color, '#fbf5e6']);
   }
@@ -306,8 +305,8 @@ function gameOver() {
       if (s.lastRun === run) showRank();
     });
   }
-  // Spanish mode: a postcard from Doña Rosa first, for runs that weren't instant restarts
-  setTimeout(() => (hasPostcard() && run.log.length >= 10 ? showPostcard(showCard) : showCard()), 900);
+  // Spanish mode: an everyday dialogue first, for runs that weren't instant restarts
+  setTimeout(() => (hasLesson() && run.log.length >= 10 ? showLesson(showCard) : showCard()), 900);
 }
 
 function showRank() {
@@ -682,7 +681,7 @@ const tapped = fn => () => {
 againBtn.addEventListener('click', tapped(() => newGame()));
 watchBtn.addEventListener('click', tapped(() => watch(s.lastRun, L('your run', 'tu partida'))));
 watchThemBtn.addEventListener('click', tapped(() => watch(s.vs, L(`${s.vs.name}'s run`, `partida de ${s.vs.name}`))));
-initPostcards(tapped);
+initLessons(tapped);
 shareBtn.addEventListener('click', tapped(share));
 whoEl.parentElement.addEventListener('click', tapped(() => {
   const n = cleanName(prompt(L('your name', 'tu nombre'), s.name));

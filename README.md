@@ -46,7 +46,7 @@ Pieces squash and wobble on impact. Merges freeze for a beat, flash, shove their
 - **Art:** every sprite drawn procedurally as paper cutouts (`js/items.js`)
 - **Audio:** Web Audio API synth (SFX + generative music), no files
 - **Backend:** Flask static server (`server.py`)
-- **Font:** Gaegu (Google Fonts)
+- **Font:** Mali (Google Fonts)
 
 ## License
 

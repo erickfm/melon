@@ -1,26 +1,31 @@
 /**
  * Spanish mode (opt-in, off by default; toggled by the bare "ñ" icon).
  *
- * In play: the game's words switch to Spanish (`L(en, es)` everywhere), and a
- * Spanish voice (speechSynthesis, Latin American when available) calls out new
- * plants, combos, fever and melons. Between runs: a postcard from Doña Rosa
- * (es-story.js) after each run of 10+ drops. Tap a word for its meaning and to
- * hear it; words you've looked up get a dotted underline when they come back.
+ * In play: the game's words switch to Spanish (`L(en, es)` everywhere) and a
+ * Spanish voice (speechSynthesis, Latin American when available) cheers
+ * combos with numbers and big merges with everyday praise.
+ * Between runs: after each run of 10+ drops, the next everyday dialogue
+ * (es-lessons.js) with one key phrase. Tap a word for its meaning and sound,
+ * tap a speaker to hear the line, 🔊 plays the whole thing in two voices,
+ * "inglés" shows each line's translation, ‹ › flips back through the
+ * phrasebook. Words looked up before get a dotted underline.
  *
- * State lives in localStorage `melon_es`: { on, next, looked: {word: n} }.
+ * State lives in localStorage `melon_es`: { v, on, next, looked: {word: n} }.
  */
 
-import { POSTCARDS, GLOSS, FROM } from './es-story.js';
+import { DIALOGUES, GLOSS, ME } from './es-lessons.js';
 
-const KEY = 'melon_es';
+const KEY = 'melon_es', VERSION = 2;  // v1 was the old postcard story; its progress doesn't carry over
 const load = () => { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch { return {}; } };
-const st = Object.assign({ on: false, next: 0, looked: {} }, load());
+const saved = load();
+const st = { on: !!saved.on, v: VERSION, next: 0, looked: {}, ...(saved.v === VERSION ? saved : {}) };
 const persist = () => { try { localStorage.setItem(KEY, JSON.stringify(st)); } catch {} };
+persist();
 
 export const es = () => st.on;
 export const L = (en, sp) => (st.on ? sp : en);
 
-// The growth chain in Spanish, with articles (gender is the thing to learn).
+// The growth chain in Spanish, with articles (only shown, never spoken).
 const NAMES = [
   ['la', 'semilla'], ['el', 'brote'], ['el', 'trébol'], ['la', 'margarita'], ['la', 'rosa'],
   ['la', 'amapola'], ['el', 'girasol'], ['el', 'repollo'], ['la', 'calabaza'], ['el', 'melón'],
@@ -30,26 +35,29 @@ export const withArticle = t => NAMES[t].join(' ');
 export const isFem = t => NAMES[t][0] === 'la';
 const NUMBERS = ['cero', 'uno', 'dos', 'tres', 'cuatro', 'cinco', 'seis', 'siete', 'ocho', 'nueve', 'diez'];
 export const numberWord = n => NUMBERS[n] ?? String(n);
+const PRAISE = ['¡muy bien!', '¡eso!', '¡qué bien!', '¡excelente!', '¡bravo!', '¡así se hace!'];
+export const praise = () => PRAISE[(Math.random() * PRAISE.length) | 0];
 
-// --- voice ---
+// --- voices: a woman's for her lines and the game, a man's for his ---
 
-let voice = null, muted = false, speaking = 0, unlocked = false;
+let voiceF = null, voiceM = null, muted = false, speaking = -1, unlocked = false;
 const synth = typeof speechSynthesis !== 'undefined' ? speechSynthesis : null;
+const MALE = /juan|jorge|diego|carlos|andr[eé]s|pablo|enrique|ra[uú]l|male|hombre/i;
 
-function pickVoice() {
+function pickVoices() {
   if (!synth) return;
-  const vs = synth.getVoices().filter(v => /^es/i.test(v.lang));
   const rank = v => {
     const l = v.lang.replace('_', '-').toLowerCase();
-    let r = l === 'es-mx' ? 0 : l === 'es-us' || l === 'es-419' ? 1 : l === 'es-es' ? 4 : 2;
-    if (/paulina|juan|sabina|google español de estados unidos/i.test(v.name)) r -= 0.5;
-    return r;
+    return l === 'es-mx' ? 0 : l === 'es-us' || l === 'es-419' ? 1 : l.startsWith('es-') && l !== 'es-es' ? 2 : 3;
   };
-  voice = vs.sort((a, b) => rank(a) - rank(b))[0] || null;
+  const vs = synth.getVoices().filter(v => /^es/i.test(v.lang)).sort((a, b) => rank(a) - rank(b));
+  voiceM = vs.find(v => MALE.test(v.name)) || null;
+  voiceF = vs.find(v => !MALE.test(v.name)) || voiceM;
+  voiceM ||= voiceF;
 }
 if (synth) {
-  pickVoice();
-  synth.addEventListener?.('voiceschanged', pickVoice);
+  pickVoices();
+  synth.addEventListener?.('voiceschanged', pickVoices);
 }
 
 export function setVoiceMuted(m) {
@@ -66,87 +74,130 @@ export function unlockVoice() {
   synth.speak(u);
 }
 
-// Higher priority interrupts lower; equal or lower is dropped while talking.
-export function say(text, priority = 0, rate = 1.05) {
-  if (!synth || !st.on || muted || !voice) return;
-  if (synth.speaking && priority <= speaking) return;
-  synth.cancel();
+function utter(text, { male = false, rate = 1, onend } = {}) {
+  const v = male ? voiceM : voiceF;
   const u = new SpeechSynthesisUtterance(text);
-  u.voice = voice;
-  u.lang = voice.lang;
+  u.voice = v;
+  u.lang = v.lang;
   u.rate = rate;
-  speaking = priority;
-  u.onend = () => { speaking = -1; };
-  synth.speak(u);
+  // one voice for both parts: pitch tells them apart
+  if (voiceM === voiceF) u.pitch = male ? 0.8 : 1.15;
+  u.onend = onend;
+  return u;
 }
 
-// --- postcards ---
+// Higher priority interrupts lower; equal or lower is dropped while talking.
+export function say(text, priority = 0, opts = {}) {
+  if (!synth || !st.on || muted || !voiceF) return;
+  if (synth.speaking && priority <= speaking) return;
+  synth.cancel();
+  speaking = priority;
+  synth.speak(utter(text, { rate: 1.05, ...opts, onend: () => { speaking = -1; } }));
+}
+
+// A whole dialogue, line by line, each speaker in their own voice.
+function sayLines(lines) {
+  if (!synth || muted || !voiceF) return;
+  synth.cancel();
+  speaking = 9;
+  lines.forEach(([who, text], i) => synth.speak(utter(text.replace(/…/g, ', '), {
+    male: who !== ME, rate: 0.9, onend: i === lines.length - 1 ? () => { speaking = -1; } : undefined,
+  })));
+}
+
+// --- the between-runs dialogue ---
 
 const $ = id => document.getElementById(id);
 let shown = 0, onDone = null;
+const WORD = /([A-Za-zÁÉÍÓÚÑÜáéíóúñü]+)/;
 
-export const hasPostcard = () => st.on && st.next < POSTCARDS.length;
+export const hasLesson = () => st.on && st.next < DIALOGUES.length;
 
-// After a run: unlock the next postcard and show it; calls done() when closed.
-export function showPostcard(done) {
+// After a run: unlock the next dialogue and show it; calls done() when closed.
+export function showLesson(done) {
   onDone = done;
   shown = st.next;
-  st.next = Math.min(POSTCARDS.length, st.next + 1);
+  st.next = Math.min(DIALOGUES.length, st.next + 1);
   persist();
-  renderPostcard();
-  $('postcard').classList.remove('hidden');
+  renderLesson();
+  $('lesson').classList.remove('hidden');
 }
 
-function renderPostcard() {
-  const [text, en] = POSTCARDS[shown];
-  $('pc-from').textContent = FROM;
-  $('pc-n').textContent = `postal ${shown + 1} de ${POSTCARDS.length}`;
-  const box = $('pc-text');
-  box.replaceChildren();
-  // words become tappable spans; spaces and punctuation stay plain text
-  for (const part of text.split(/([A-Za-zÁÉÍÓÚÑÜáéíóúñü]+)/)) {
+// Spanish text → tappable word spans; `hi` marks the key phrase's words.
+function words(text, into, hi = null) {
+  for (const part of text.split(WORD)) {
     if (!part) continue;
     const key = part.toLowerCase();
-    if (GLOSS[key]) {
-      const w = document.createElement('span');
-      w.className = 'w' + (st.looked[key] ? ' seen' : '');
-      w.textContent = part;
-      w.addEventListener('click', e => { e.stopPropagation(); gloss(w, key); });
-      box.append(w);
-    } else {
-      box.append(part);
+    if (!GLOSS[key]) {
+      into.append(part);
+      continue;
     }
+    const w = document.createElement('span');
+    w.className = 'w' + (st.looked[key] ? ' seen' : '') + (hi?.has(key) ? ' key' : '');
+    w.textContent = part;
+    w.addEventListener('click', e => { e.stopPropagation(); gloss(w, key); });
+    into.append(w);
   }
-  $('pc-en').textContent = en;
-  $('pc-en').hidden = true;
-  $('pc-gloss').textContent = '';
-  $('pc-prev').disabled = shown === 0;
-  $('pc-fwd').disabled = shown >= st.next - 1;
-  const n = Object.keys(st.looked).length;
-  $('pc-words').textContent = n ? `palabras que buscaste: ${n}` : 'toca una palabra para ver qué significa';
+}
+
+function renderLesson() {
+  const dl = DIALOGUES[shown];
+  $('ls-scene').textContent = `${dl.icon} ${dl.scene[0]}`;
+  $('ls-scene-en').textContent = dl.scene[1];
+  const keyWords = new Set(dl.phrase[0].toLowerCase().match(/[a-záéíóúñü]+/g));
+  const box = $('ls-lines');
+  box.replaceChildren();
+  for (const [who, text, en] of dl.lines) {
+    const row = document.createElement('div');
+    row.className = 'ln' + (who === ME ? ' me' : '');
+    const name = document.createElement('button');
+    name.className = 'who';
+    name.textContent = who;
+    name.addEventListener('click', () => say(text.replace(/…/g, ', '), 9, { male: who !== ME, rate: 0.9 }));
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble';
+    const p = document.createElement('p');
+    p.lang = 'es';
+    words(text, p, keyWords);
+    const tr = document.createElement('p');
+    tr.className = 'tr';
+    tr.textContent = en;
+    bubble.append(p, tr);
+    row.append(name, bubble);
+    box.append(row);
+  }
+  $('lesson').classList.remove('english');
+  const ph = $('ls-phrase');
+  ph.replaceChildren();
+  words(dl.phrase[0], ph);
+  $('ls-phrase-en').textContent = dl.phrase[1];
+  $('ls-gloss').textContent = '';
+  $('ls-prev').disabled = shown === 0;
+  $('ls-fwd').disabled = shown >= st.next - 1;
+  $('ls-n').textContent = `frase ${shown + 1} de ${DIALOGUES.length}`;
 }
 
 function gloss(el, key) {
-  document.querySelectorAll('#pc-text .w.on').forEach(w => w.classList.remove('on'));
+  document.querySelectorAll('#lesson .w.on').forEach(w => w.classList.remove('on'));
   el.classList.add('on');
-  const g = $('pc-gloss');
+  const g = $('ls-gloss');
   g.replaceChildren();
   const b = document.createElement('b');
   b.textContent = el.textContent;
   g.append(b, ' · ' + GLOSS[key]);
-  say(el.textContent, 9, 0.9);
+  say(el.textContent, 9, { rate: 0.85 });
   st.looked[key] = (st.looked[key] || 0) + 1;
   persist();
 }
 
-export function initPostcards(tap) {
-  $('pc-say').addEventListener('click', tap(() => say(POSTCARDS[shown][0], 9, 0.85)));
-  $('pc-tr').addEventListener('click', tap(() => { $('pc-en').hidden = !$('pc-en').hidden; }));
-  $('pc-prev').addEventListener('click', tap(() => { shown = Math.max(0, shown - 1); renderPostcard(); }));
-  $('pc-fwd').addEventListener('click', tap(() => { shown = Math.min(st.next - 1, shown + 1); renderPostcard(); }));
-  $('pc-next').addEventListener('click', tap(() => {
+export function initLessons(tap) {
+  $('ls-say').addEventListener('click', tap(() => sayLines(DIALOGUES[shown].lines)));
+  $('ls-tr').addEventListener('click', tap(() => $('lesson').classList.toggle('english')));
+  $('ls-prev').addEventListener('click', tap(() => { shown = Math.max(0, shown - 1); renderLesson(); }));
+  $('ls-fwd').addEventListener('click', tap(() => { shown = Math.min(st.next - 1, shown + 1); renderLesson(); }));
+  $('ls-next').addEventListener('click', tap(() => {
     synth?.cancel();
-    $('postcard').classList.add('hidden');
+    $('lesson').classList.add('hidden');
     onDone?.();
   }));
 }

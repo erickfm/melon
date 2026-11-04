@@ -46,8 +46,10 @@ let bgCache = null;
 
 const MAX_PIXELS = 2.6e6;  // device-pixel budget for the canvas
 
-// Gaegu has no accented letters; Patrick Hand fills in á é í ó ú ñ ¡ ¿ (Spanish mode)
-export const font = size => `700 ${size}px Gaegu, 'Patrick Hand', 'Comic Sans MS', sans-serif`;
+// Mali: hand-drawn, with a real bold and every Spanish letter. Sizes across
+// the game were tuned for Gaegu, which runs small; 0.8 keeps the same widths.
+export const FONT_SCALE = 0.8;
+export const font = size => `700 ${size * FONT_SCALE}px Mali, 'Comic Sans MS', sans-serif`;
 
 export function initRender(c) {
   canvas = c;
@@ -169,7 +171,7 @@ export function render(s) {
   if (s.current !== null && s.phase !== 'over') drawHeld(s, pump);
   if (!s.dropped && s.phase === 'play') {
     ctx.globalAlpha = 0.45 + 0.15 * Math.sin(s.time * 3);
-    text(L('drag to aim, let go to drop', 'arrastra para apuntar, suelta para soltar'), WORLD_W / 2, 440, 20, 'center', pal.ink);
+    text(L('drag to aim, let go to drop', 'arrastra y suelta'), WORLD_W / 2, 440, 20, 'center', pal.ink);
     ctx.globalAlpha = 1;
   }
   drawFx(ctx, font);

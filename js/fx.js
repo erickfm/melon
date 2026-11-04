@@ -254,7 +254,10 @@ export function drawBanners(ctx, font, time) {
     ctx.save();
     ctx.translate(WORLD_W / 2, b.y - t * 20);
     ctx.rotate(b.tilt + Math.sin(time * 9) * 0.02);
-    ctx.scale(s, s);
+    // long names or Spanish lines shrink to fit inside the jar
+    ctx.font = font(b.size);
+    const fit = Math.min(1, 340 / (ctx.measureText(b.text).width + b.size * 0.2));
+    ctx.scale(s * fit, s * fit);
     const color = b.color === 'rainbow' ? `hsl(${(time * 400) % 360},90%,55%)` : b.color;
     outlined(ctx, font, b.text, 0, 0, b.size, color, true);
     ctx.restore();
@@ -267,11 +270,14 @@ function outlined(ctx, font, text, x, y, size, color, heavy = false) {
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
   ctx.lineJoin = 'round';
+  // Thin enough that letter holes (o, e, 8…) stay open: a thicker outline
+  // almost fills them and leaves a speckle in the middle.
+  ctx.lineWidth = size * 0.2;
   if (heavy) {
-    ctx.fillStyle = 'rgba(50,30,10,0.25)';
-    ctx.fillText(text, x + 2, y + 3);
+    // paper-sticker drop shadow under the whole outlined shape
+    ctx.strokeStyle = 'rgba(60,35,15,0.22)';
+    ctx.strokeText(text, x + 2, y + 3);
   }
-  ctx.lineWidth = size * (heavy ? 0.32 : 0.28);
   ctx.strokeStyle = '#fbf5e6';
   ctx.strokeText(text, x, y);
   ctx.fillStyle = color;
