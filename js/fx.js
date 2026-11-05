@@ -73,7 +73,8 @@ export function mergeFx(x, y, tier, { combo = 1, fever = false, big = false } = 
   fx.rings.push({ x, y, r: R * 0.6, R: R * (big ? 2.6 : 1.5), life: 0, max: big ? 0.6 : 0.4, color: t.color, w: 5 + tier * 0.6 });
   if (tier >= 4 || combo >= 3) fx.rings.push({ x, y, r: R * 0.3, R: R * 2.2, life: -0.06, max: 0.5, color: '#fbf5e6', w: 3 });
   fx.flashes.push({ x, y, r: R * (big ? 3 : 1.7), life: 0, max: big ? 0.35 : 0.16 + tier * 0.012 });
-  fx.pulses.push({ x, y, color: t.color, life: 0, max: 0.9 + tier * 0.06, R: 120 + tier * 45 });
+  // colored glow behind the jar: kept for fever and the melon, too busy in calm play
+  if (fever || big) fx.pulses.push({ x, y, color: t.color, life: 0, max: 0.9 + tier * 0.06, R: 120 + tier * 45 });
 
   fx.shake = Math.max(fx.shake, big ? 12 : tier >= 5 ? 1.5 + (tier - 5) * 1.6 : combo >= 3 ? 1.2 : 0);
   if (tier >= 5 || big) fx.zoomV += big ? 0.6 : 0.08 + (tier - 5) * 0.06;

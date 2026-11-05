@@ -229,7 +229,7 @@ function cutout(pts, color, dx = 2, dy = 3) {
 
 function drawJarBack(s, pump) {
   tracePoly(ctx, jar.back);
-  ctx.fillStyle = s.fever ? `rgba(255,255,255,${0.16 + pump * 0.12})` : `rgba(${pal.jarBack},${pal.jarBackA - pump * 0.05})`;
+  ctx.fillStyle = s.fever ? `rgba(255,255,255,${0.16 + pump * 0.12})` : `rgba(${pal.jarBack},${pal.jarBackA})`;
   ctx.fill();
 }
 
