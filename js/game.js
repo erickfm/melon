@@ -12,7 +12,7 @@
 
 import {
   WORLD_W, JAR, DROP_Y, DANGER_Y, STEP, DROP_COOLDOWN, SPAWN_WEIGHTS,
-  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS, TRICK_POP, TRICK_AIR, TRICK_DX, TRICK_LINK, TRICK_BONUS,
+  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS, TRICK_POP, TRICK_AIR, TRICK_DX, TRICK_VX, TRICK_LINK, TRICK_BONUS,
 } from './constants.js';
 import { TIERS } from './items.js';
 import { bodies, makeBody, stepPhysics, shockwave, perSecond, getLastH, resetPhysics } from './physics.js';
@@ -254,8 +254,12 @@ function airborne(dt) {
   }
 }
 
-// Sideways travel of a qualifying flight, else 0.
-const trickDx = b => (b.fly && b.air >= TRICK_AIR ? Math.abs(b.x - b.lx) : 0);
+// Sideways travel of a qualifying flight (long enough, far and fast enough sideways), else 0.
+function trickDx(b) {
+  if (!b.fly || b.air < TRICK_AIR) return 0;
+  const dx = Math.abs(b.x - b.lx);
+  return dx / b.air >= TRICK_VX ? dx : 0;
+}
 
 // Path points while a cascade is live (visual only): a point a frame.
 function tracePoint(b) {
