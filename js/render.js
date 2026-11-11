@@ -9,6 +9,8 @@ import { WORLD_W, WORLD_H, JAR, DANGER_Y, DROP_Y, NEXT, BUTTONS, CHAIN_Y } from 
 import { TIERS, buildSprite } from './items.js';
 import { TAU, mulberry32, rectPts, tracePoly, getGrain } from './paper.js';
 import { fx, drawFx, drawBackFx, drawBanners } from './fx.js';
+import { drawTraces } from './trace.js';
+import { cam, HOME, viewCenter } from './camera.js';
 import { beatPhase } from './audio.js';
 import { L, es } from './es.js';
 
@@ -158,9 +160,9 @@ export function render(s) {
   const shake = fx.shake + (s.overflow > 0 ? 1.2 : 0);
   const sx = shake ? (Math.random() - 0.5) * shake : 0;
   const sy = shake ? (Math.random() - 0.5) * shake : 0;
-  const z = 1 + fx.zoom + (s.fever ? pump * 0.006 : 0);
-  const fx0 = WORLD_W / 2, fy0 = (JAR.top + JAR.bottom) / 2;
-  ctx.setTransform(k * z, 0, 0, k * z, (sx + fx0 - fx0 * z) * k, (sy + fy0 - fy0 * z) * k);
+  const z = cam.z * (1 + fx.zoom + (s.fever ? pump * 0.006 : 0));
+  const [cx, cy] = viewCenter(z);
+  ctx.setTransform(k * z, 0, 0, k * z, (sx + HOME.x - cx * z) * k, (sy + HOME.y - cy * z) * k);
 
   drawBackFx(ctx, s.fever, s.time, beat);
   drawJarBack(s, pump);
@@ -174,7 +176,10 @@ export function render(s) {
     text(L('drag to aim, let go to drop', 'arrastra y suelta'), WORLD_W / 2, 440, 20, 'center', pal.ink);
     ctx.globalAlpha = 1;
   }
+  drawTraces(ctx, pal);
   drawFx(ctx, font);
+  // HUD and banners stay put while the camera moves
+  ctx.setTransform(k, 0, 0, k, sx * k * 0.5, sy * k * 0.5);
   drawHud(s, pump);
   drawBanners(ctx, font, s.time);
 

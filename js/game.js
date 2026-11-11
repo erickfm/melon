@@ -12,11 +12,13 @@
 
 import {
   WORLD_W, JAR, DROP_Y, DANGER_Y, STEP, DROP_COOLDOWN, SPAWN_WEIGHTS,
-  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS, TRICK_POP, TRICK_AIR, TRICK_DX, TRICK_BONUS,
+  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS, TRICK_POP, TRICK_AIR, TRICK_DX, TRICK_LINK, TRICK_BONUS,
 } from './constants.js';
 import { TIERS } from './items.js';
 import { bodies, makeBody, stepPhysics, shockwave, perSecond, getLastH, resetPhysics } from './physics.js';
-import { fx, clearFx, initMotes, mergeFx, landFx, rain, popup, banner, updateFx, trickArc } from './fx.js';
+import { fx, clearFx, initMotes, mergeFx, landFx, rain, popup, banner, updateFx } from './fx.js';
+import { trickTrace, extendTrace, updateTraces, clearTraces } from './trace.js';
+import { focus, frame as frameBox, updateCamera, resetCamera } from './camera.js';
 import {
   initAudio, setMuted, setMood, playDrop, playLand, playMerge, playMelon, playFever,
   playCombo, playHeartbeat, playOver, playUi, setQuiet, playTrick,
@@ -149,10 +151,13 @@ function resetRun(seed) {
   bodies.length = 0;
   resetPhysics();
   clearFx();
+  clearTraces();
+  resetCamera();
+  revealBox = null;
   Object.assign(s, {
     score: 0, shownScore: 0, cooldown: 0, appearT: 0, overflow: 0, near: 0, biggest: 0, restartArmed: 0,
     combo: 0, comboMult: 1, comboWindow: COMBO_WINDOW, lastMerge: -99, fever: false, feverT: 0,
-    freeze: 0, slowT: 0, time: 0, tick: 0, seed, rng: seed | 0, log: [], marks: [], dropped: false, tricks: 0,
+    freeze: 0, slowT: 0, time: 0, tick: 0, seed, rng: seed | 0, log: [], marks: [], dropped: false, tricks: 0, bullet: 0,
   });
   s.current = roll();
   s.next = roll();
@@ -233,10 +238,16 @@ function airborne(dt) {
       b.pop = 0;
       b.path = [b.x, b.y];
     }
-    if (b.fly && b.path) {
-      // flight trace for the arc effect (visual only): a point every 8 units
-      const n = b.path.length, dx = b.x - b.path[n - 2], dy = b.y - b.path[n - 1];
-      if (dx * dx + dy * dy > 64 && n < 400) b.path.push(b.x, b.y);
+    // flight path for the trace (visual only): a point a frame
+    if (b.fly && b.path && b.path.length < 800) b.path.push(b.x, b.y);
+    if (b.chain) {
+      if ((b.linkT -= dt) > 0) {
+        if (b.tpath) tracePoint(b);
+      } else {
+        // the cascade fizzled
+        b.chain = 0;
+        b.tpath = b.trace = null;
+      }
     }
     b.pop = Math.max(0, b.pop - dt);
     b.touch = 0;
@@ -246,29 +257,88 @@ function airborne(dt) {
 // Sideways travel of a qualifying flight, else 0.
 const trickDx = b => (b.fly && b.air >= TRICK_AIR ? Math.abs(b.x - b.lx) : 0);
 
-// `t` is the tier the merge made (a melon pair counts as the melon).
-function trickshot(flyer, x, y, t, mult) {
-  s.tricks++;
-  const pts = Math.round((TRICK_BONUS + TIERS[t].points * 2) * mult);
+// Path points while a cascade is live (visual only): a point a frame.
+function tracePoint(b) {
+  if (b.tpath.length < 1600) b.tpath.push(b.x, b.y);
+}
+
+// What a merge continues: the qualifying hop that just landed (link 1), or a
+// live cascade from one (link n+1). Returns null if it's a plain merge.
+function trickLink(a, b) {
+  let best = null;
+  for (const c of [a, b]) {
+    if (c.chain && c.linkT > 0 && (!best || c.chain + 1 > best.chain)) {
+      const path = c.tpath || [c.x, c.y];
+      // fresh: what this piece travelled since it was made, to extend the live trace
+      best = { chain: c.chain + 1, path, fresh: path.slice(Math.max(0, (c.tmark ?? 2) - 2)), tier: c.ttier ?? c.tier, trace: c.trace };
+    }
+  }
+  if (best) return best;
+  const da = trickDx(a), db = trickDx(b);
+  if (Math.max(da, db) < TRICK_DX) return null;
+  const f = da >= db ? a : b;
+  return { chain: 1, path: f.path || [f.lx, f.y], tier: f.tier, trace: null };
+}
+
+// Camera: punch in on the merge in slow motion, then pull back to frame the
+// whole path while the shooting star runs it. Bullet time (`s.bullet`) is sim
+// state; the camera itself is visual only.
+let revealAt = 0, revealBox = null;
+
+function bounds(p) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity;
+  for (let i = 0; i < p.length; i += 2) {
+    x0 = Math.min(x0, p[i]); x1 = Math.max(x1, p[i]);
+    y0 = Math.min(y0, p[i + 1]); y1 = Math.max(y1, p[i + 1]);
+  }
+  return [x0, y0, x1, y1];
+}
+
+function camMoments() {
+  if (revealBox && s.time >= revealAt) {
+    frameBox(...revealBox, { hold: 1.1, rate: 4, homeRate: 2.2, pad: 50, maxZ: 1.35 });
+    revealBox = null;
+  }
+}
+
+// k = merges since the hop (2 = the first that counts). `t` is the tier it made.
+function trickshot(k, link, x, y, t, mult) {
+  if (k === 2) s.tricks++;
+  const pts = Math.round((TRICK_BONUS + TIERS[t].points * 2) * mult * Math.min(k - 1, 3));
   addScore(pts);
-  if (flyer.path) trickArc(flyer.path, x, y);
-  popup(clamp(x, JAR.left + 90, JAR.right - 90), y - 34, L('trickshot +', 'tirazo +') + pts, 22 + Math.min(t, 8) * 1.2, '#e9842a');
-  banner(L('TRICKSHOT!', '¡QUÉ TIRO!'), 56, '#e9842a', 300, 1.6);
-  speak('¡qué tiro!', 4);
-  rain(50, ['#e9842a', '#ffd93d', '#fbf5e6', TIERS[t].color]);
-  s.freeze = Math.max(s.freeze, 0.09);
-  s.slowT = Math.max(s.slowT, 0.7);
-  fx.zoomV += 0.35;
-  fx.shake = Math.max(fx.shake, 5);
+  const path = link.path.concat(x, y);
+  link.trace = (link.trace && extendTrace(link.trace, link.fresh.concat(x, y))) || trickTrace(path);
+  s.freeze = Math.max(s.freeze, 0.1);
+  s.bullet = Math.max(s.bullet, 0.55);
+  focus(x, y, 1.7, { hold: 0.38, rate: 22 });
+  revealAt = s.time + 0.38;
+  revealBox = bounds(path);
+  popup(clamp(x, JAR.left + 90, JAR.right - 90), y - 34, L('trickshot +', 'tirazo +') + pts, 22 + Math.min(t, 8) * 1.2 + (k - 2) * 3, '#e9842a');
+  banner(k === 2 ? L('TRICKSHOT!', '¡QUÉ TIRO!') : L(`TRICKSHOT ×${k}!`, `¡QUÉ TIRO ×${k}!`), 56 + Math.min(k - 2, 3) * 6, '#e9842a', 300, 1.6);
+  speak(k === 2 ? '¡qué tiro!' : `¡${numberWord(k)}!`, 4);
+  rain(40 + k * 10, ['#e9842a', '#ffd93d', '#fbf5e6', TIERS[link.tier].color]);
+  fx.shake = Math.max(fx.shake, 4 + k);
   playTrick();
   buzz(2);
+}
+
+// After a merge's own effects: celebrate the cascade, and hand it to the new piece.
+function cascade(link, x, y, t, mult, nb) {
+  if (!link) return;
+  if (link.chain >= 2) trickshot(link.chain, link, x, y, t, mult);
+  if (!nb) return;  // a melon pair: nothing left to carry it
+  nb.chain = link.chain;
+  nb.linkT = TRICK_LINK;
+  nb.tpath = link.path.concat(x, y);
+  nb.tmark = nb.tpath.length;
+  nb.ttier = link.tier;
+  nb.trace = link.trace;
 }
 
 function onMerge(a, b) {
   a.dead = b.dead = true;
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
-  const da = trickDx(a), db = trickDx(b);
-  const flyer = Math.max(da, db) >= TRICK_DX ? (da >= db ? a : b) : null;
+  const link = trickLink(a, b);
 
   s.combo = s.time - s.lastMerge < s.comboWindow ? s.combo + 1 : 1;
   s.lastMerge = s.time;
@@ -290,7 +360,7 @@ function onMerge(a, b) {
     s.slowT = 1.3;
     playMelon();
     buzz(2);
-    if (flyer) trickshot(flyer, x, y, TOP, mult);
+    cascade(link, x, y, TOP, mult, null);
     return;
   }
 
@@ -330,7 +400,7 @@ function onMerge(a, b) {
     banner(L('new: ' + TIERS[t].name + '!', `¡${isFem(t) ? 'nueva' : 'nuevo'}: ${withArticle(t)}!`), 32, TIERS[t].color === '#fffaf0' ? '#4a3426' : TIERS[t].color, 405, 1.6);
     rain(40, [TIERS[t].color, '#fbf5e6']);
   }
-  if (flyer) trickshot(flyer, x, y, t, mult);
+  cascade(link, x, y, t, mult, nb);
 }
 
 function startFever() {
@@ -531,8 +601,8 @@ let saveTimer = 0;
 // continues bit-for-bit and its replay still matches.
 const SIM_KEYS = ['score', 'current', 'next', 'cooldown', 'overflow', 'near', 'biggest', 'combo', 'comboMult',
   'comboWindow', 'lastMerge', 'fever', 'feverT', 'freeze', 'slowT', 'time', 'tick', 'seed', 'rng', 'log', 'marks',
-  'vs', 'beaten', 'dropped', 'tricks'];
-const BODY_KEYS = ['tier', 'x', 'y', 'px', 'py', 'r', 'r0', 'grow', 'angle', 'spin', 'age', 'air', 'lx', 'pop', 'fly'];
+  'vs', 'beaten', 'dropped', 'tricks', 'bullet'];
+const BODY_KEYS = ['tier', 'x', 'y', 'px', 'py', 'r', 'r0', 'grow', 'angle', 'spin', 'age', 'air', 'lx', 'pop', 'fly', 'chain', 'linkT'];
 
 function save() {
   if (s.phase !== 'play') return;
@@ -555,6 +625,7 @@ function load() {
     bodies.push(b);
   }
   s.tricks ||= 0;
+  s.bullet ||= 0;
   resetPhysics(d.lastH || 0);
   s.shownScore = s.score;
   s.heldX = heldXFor(s.current ?? s.next);
@@ -597,6 +668,10 @@ let moodKey = '';
 function update(dt) {
   s.tick++;
   s.time += dt;
+  // real time: the celebration and camera play through hit-stop and slow-mo
+  updateTraces(dt);
+  camMoments();
+  updateCamera(dt);
   s.restartArmed = Math.max(0, s.restartArmed - dt);
   s.shownScore += (s.score - s.shownScore) * Math.min(1, dt * 12);
   if (Math.abs(s.score - s.shownScore) < 0.5) s.shownScore = s.score;
@@ -616,7 +691,9 @@ function update(dt) {
     return;
   }
   s.slowT = Math.max(0, s.slowT - dt);
-  const gdt = dt * (1 - 0.68 * clamp(s.slowT / 0.3, 0, 1));
+  s.bullet = Math.max(0, s.bullet - dt);
+  // slow-mo: big merges ease to 0.32×, trickshot bullet time to 0.2×
+  const gdt = dt * Math.min(1 - 0.68 * clamp(s.slowT / 0.3, 0, 1), 1 - 0.8 * clamp(s.bullet / 0.25, 0, 1));
   updateFx(gdt);
   if (s.phase === 'over') return;
 

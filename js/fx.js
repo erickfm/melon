@@ -8,7 +8,7 @@ import { TIERS } from './items.js';
 import { TAU } from './paper.js';
 import { WORLD_W, WORLD_H } from './constants.js';
 
-export const fx = { parts: [], rings: [], pops: [], flashes: [], pulses: [], banners: [], arcs: [], motes: [], shake: 0, zoom: 0, zoomV: 0, whiteout: 0 };
+export const fx = { parts: [], rings: [], pops: [], flashes: [], pulses: [], banners: [], motes: [], shake: 0, zoom: 0, zoomV: 0, whiteout: 0 };
 
 // What flies out of each tier when it's made: [shape, colors]
 const BITS = [
@@ -30,7 +30,7 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const pick = arr => arr[(Math.random() * arr.length) | 0];
 
 export function clearFx() {
-  for (const k of ['parts', 'rings', 'pops', 'flashes', 'pulses', 'banners', 'arcs']) fx[k].length = 0;
+  for (const k of ['parts', 'rings', 'pops', 'flashes', 'pulses', 'banners']) fx[k].length = 0;
   fx.shake = fx.zoom = fx.zoomV = fx.whiteout = 0;
 }
 
@@ -119,18 +119,6 @@ export function banner(text, size, color, y = 300, max = 1.1) {
   fx.banners.push({ text, size, color, y, life: 0, max, tilt: rand(-0.08, 0.08) });
 }
 
-// A trickshot's flight path, traced as dots that pop in along it, then fade.
-export function trickArc(path, x, y) {
-  const pts = path.concat(x, y);
-  fx.arcs.push({ pts, life: 0, max: 1.6 });
-  for (let i = 0; i < pts.length; i += 12) {
-    fx.parts.push({
-      shape: 'star', x: pts[i], y: pts[i + 1], vx: rand(-20, 20), vy: rand(-40, 0),
-      rot: 0, vr: 0, ph: 0, w: rand(3, 5), h: 0, color: '#ffd93d', life: 0, max: rand(0.5, 0.9),
-    });
-  }
-}
-
 export function updateFx(dt) {
   for (const p of fx.parts) {
     p.life += dt;
@@ -147,14 +135,12 @@ export function updateFx(dt) {
   for (const f of fx.flashes) f.life += dt;
   for (const p of fx.pulses) p.life += dt;
   for (const b of fx.banners) b.life += dt;
-  for (const a of fx.arcs) a.life += dt;
   for (const p of fx.pops) { p.life += dt; p.y -= 42 * dt; }
   fx.parts = fx.parts.filter(p => p.life < p.max && p.y < WORLD_H + 40);
   fx.rings = fx.rings.filter(r => r.life < r.max);
   fx.flashes = fx.flashes.filter(f => f.life < f.max);
   fx.pulses = fx.pulses.filter(p => p.life < p.max);
   fx.banners = fx.banners.filter(b => b.life < b.max);
-  fx.arcs = fx.arcs.filter(a => a.life < a.max);
   fx.pops = fx.pops.filter(p => p.life < p.max);
   if (fx.parts.length > MAX_PARTS) fx.parts.splice(0, fx.parts.length - MAX_PARTS);
   fx.shake = Math.max(0, fx.shake - dt * 28);
@@ -205,23 +191,6 @@ export function drawFx(ctx, font) {
     ctx.drawImage(flashTex(), f.x - r, f.y - r, r * 2, r * 2);
   }
   ctx.restore();
-
-  for (const a of fx.arcs) {
-    const t = a.life / a.max, n = a.pts.length / 2;
-    const shown = Math.min(n, Math.ceil(n * Math.min(1, t * 12)));  // draws on fast (slow-mo stretches it), start to finish
-    ctx.globalAlpha = t < 0.6 ? 1 : (1 - t) / 0.4;
-    for (const [pad, color] of [[1.6, '#fbf5e6'], [0, '#e9842a']]) {
-      ctx.fillStyle = color;
-      ctx.beginPath();
-      for (let i = 0; i < shown; i += 2) {
-        const x = a.pts[i * 2], y = a.pts[i * 2 + 1], r = 2.4 + (i / n) * 3 + pad;
-        ctx.moveTo(x + r, y);
-        ctx.arc(x, y, r, 0, TAU);
-      }
-      ctx.fill();
-    }
-  }
-  ctx.globalAlpha = 1;
 
   for (const r of fx.rings) {
     if (r.life < 0) continue;

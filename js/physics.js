@@ -45,6 +45,7 @@ export function makeBody(tier, x, y, { r0, vx = 0, vy = 0, angle = 0 } = {}) {
     // don't count) and its x then; `touch` is set on contact until the game reads it
     air: 0, lx: x, touch: 0,
     pop: 0, fly: 0,                      // trickshot arming, driven by the game
+    chain: 0, linkT: 0,                  // trickshot cascade: merges so far, s left for the next
   };
 }
 
