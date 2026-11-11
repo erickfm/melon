@@ -12,14 +12,14 @@
 
 import {
   WORLD_W, JAR, DROP_Y, DANGER_Y, STEP, DROP_COOLDOWN, SPAWN_WEIGHTS,
-  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS,
+  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS, TRICK_POP, TRICK_AIR, TRICK_DX, TRICK_BONUS,
 } from './constants.js';
 import { TIERS } from './items.js';
 import { bodies, makeBody, stepPhysics, shockwave, perSecond, getLastH, resetPhysics } from './physics.js';
-import { fx, clearFx, initMotes, mergeFx, landFx, rain, popup, banner, updateFx } from './fx.js';
+import { fx, clearFx, initMotes, mergeFx, landFx, rain, popup, banner, updateFx, trickArc } from './fx.js';
 import {
   initAudio, setMuted, setMood, playDrop, playLand, playMerge, playMelon, playFever,
-  playCombo, playHeartbeat, playOver, playUi, setQuiet,
+  playCombo, playHeartbeat, playOver, playUi, setQuiet, playTrick,
 } from './audio.js';
 import { haptic } from './haptics.js';
 import { initRender, resize, render, toWorld, adaptQuality, setTheme } from './render.js';
@@ -152,7 +152,7 @@ function resetRun(seed) {
   Object.assign(s, {
     score: 0, shownScore: 0, cooldown: 0, appearT: 0, overflow: 0, near: 0, biggest: 0, restartArmed: 0,
     combo: 0, comboMult: 1, comboWindow: COMBO_WINDOW, lastMerge: -99, fever: false, feverT: 0,
-    freeze: 0, slowT: 0, time: 0, tick: 0, seed, rng: seed | 0, log: [], marks: [], dropped: false,
+    freeze: 0, slowT: 0, time: 0, tick: 0, seed, rng: seed | 0, log: [], marks: [], dropped: false, tricks: 0,
   });
   s.current = roll();
   s.next = roll();
@@ -206,9 +206,69 @@ function addScore(n) {
   }
 }
 
+// --- trickshots ---
+
+// A merge's shockwave (or the merged piece itself) arms a piece: it has
+// TRICK_POP seconds to break contact. From then on it's a flight until it
+// touches a fruit or the floor. Physics keeps the flight clock (`air`, `lx`)
+// per substep, so a brush mid-frame still ends it.
+function arm(b) {
+  if (b.fly) return;  // already mid-trick: a second push doesn't restart it
+  b.pop = TRICK_POP;
+  if (b.air > 0) {
+    // pushed while already airborne: the shot starts now, not at its last landing
+    b.air = 0;
+    b.lx = b.x;
+  }
+}
+
+// Once a frame: start and end flights. Any contact this frame ends one.
+function airborne(dt) {
+  for (const b of bodies) {
+    if (b.touch) {
+      b.fly = 0;
+      b.path = null;
+    } else if (!b.fly && b.pop > 0) {
+      b.fly = 1;
+      b.pop = 0;
+      b.path = [b.x, b.y];
+    }
+    if (b.fly && b.path) {
+      // flight trace for the arc effect (visual only): a point every 8 units
+      const n = b.path.length, dx = b.x - b.path[n - 2], dy = b.y - b.path[n - 1];
+      if (dx * dx + dy * dy > 64 && n < 400) b.path.push(b.x, b.y);
+    }
+    b.pop = Math.max(0, b.pop - dt);
+    b.touch = 0;
+  }
+}
+
+// Sideways travel of a qualifying flight, else 0.
+const trickDx = b => (b.fly && b.air >= TRICK_AIR ? Math.abs(b.x - b.lx) : 0);
+
+// `t` is the tier the merge made (a melon pair counts as the melon).
+function trickshot(flyer, x, y, t, mult) {
+  s.tricks++;
+  const pts = Math.round((TRICK_BONUS + TIERS[t].points * 2) * mult);
+  addScore(pts);
+  if (flyer.path) trickArc(flyer.path, x, y);
+  popup(clamp(x, JAR.left + 90, JAR.right - 90), y - 34, L('trickshot +', 'tirazo +') + pts, 22 + Math.min(t, 8) * 1.2, '#e9842a');
+  banner(L('TRICKSHOT!', '¡QUÉ TIRO!'), 56, '#e9842a', 300, 1.6);
+  speak('¡qué tiro!', 4);
+  rain(50, ['#e9842a', '#ffd93d', '#fbf5e6', TIERS[t].color]);
+  s.freeze = Math.max(s.freeze, 0.09);
+  s.slowT = Math.max(s.slowT, 0.7);
+  fx.zoomV += 0.35;
+  fx.shake = Math.max(fx.shake, 5);
+  playTrick();
+  buzz(2);
+}
+
 function onMerge(a, b) {
   a.dead = b.dead = true;
   const x = (a.x + b.x) / 2, y = (a.y + b.y) / 2;
+  const da = trickDx(a), db = trickDx(b);
+  const flyer = Math.max(da, db) >= TRICK_DX ? (da >= db ? a : b) : null;
 
   s.combo = s.time - s.lastMerge < s.comboWindow ? s.combo + 1 : 1;
   s.lastMerge = s.time;
@@ -222,7 +282,7 @@ function onMerge(a, b) {
     addScore(pts);
     mergeFx(x, y, TOP, { big: true, combo: s.combo, fever: s.fever });
     rain(140, TIERS.map(t => t.color));
-    shockwave(x, y, 240, 1.1);
+    shockwave(x, y, 240, 1.1, null, arm);
     popup(x, y, '+' + pts, 34);
     banner(L('MELON!!', '¡MELÓN!'), 66, 'rainbow', 330, 2);
     speak('¡melón!', 5);
@@ -230,6 +290,7 @@ function onMerge(a, b) {
     s.slowT = 1.3;
     playMelon();
     buzz(2);
+    if (flyer) trickshot(flyer, x, y, TOP, mult);
     return;
   }
 
@@ -243,7 +304,8 @@ function onMerge(a, b) {
   nb.sqA = Math.atan2(b.y - a.y, b.x - a.x);
   nb.sqV = -7;  // jelly bloop as it grows
   bodies.push(nb);
-  shockwave(x, y, R * 2.4, 0.4 + t * 0.07, nb);
+  arm(nb);
+  shockwave(x, y, R * 2.4, 0.4 + t * 0.07, nb, arm);
 
   const pts = Math.round(TIERS[t].points * mult);
   addScore(pts);
@@ -268,6 +330,7 @@ function onMerge(a, b) {
     banner(L('new: ' + TIERS[t].name + '!', `¡${isFem(t) ? 'nueva' : 'nuevo'}: ${withArticle(t)}!`), 32, TIERS[t].color === '#fffaf0' ? '#4a3426' : TIERS[t].color, 405, 1.6);
     rain(40, [TIERS[t].color, '#fbf5e6']);
   }
+  if (flyer) trickshot(flyer, x, y, t, mult);
 }
 
 function startFever() {
@@ -296,7 +359,7 @@ function gameOver() {
   }
   s.lastRun = {
     name: s.name, seed: s.seed, score: s.score, end: s.tick, log: s.log, marks: s.marks,
-    biggest: s.biggest, newBest, rank: undefined,  // undefined: sending, null: offline
+    biggest: s.biggest, tricks: s.tricks, newBest, rank: undefined,  // undefined: sending, null: offline
   };
   const run = s.lastRun;
   if (run.log.length) {
@@ -372,7 +435,9 @@ function showCard() {
   overBest.textContent = run.newBest ? L('★ new best!', '★ ¡nuevo récord!') : L('best ', 'récord ') + s.best;
   overBest.classList.toggle('gold', run.newBest);
   const big = run.biggest;
-  overBiggest.textContent = L('grew a ', isFem(big) ? 'cultivaste una ' : 'cultivaste un ') + tierName(big, TIERS[big].name);
+  const n = run.tricks;
+  overBiggest.textContent = L('grew a ', isFem(big) ? 'cultivaste una ' : 'cultivaste un ') + tierName(big, TIERS[big].name)
+    + (n ? ` · ${n} ${n > 1 ? L('trickshots', 'tirazos') : L('trickshot', 'tirazo')}` : '');
   overVs.hidden = !vs;
   overVs.textContent = vs ? `${L('you', 'tú')} ${run.score} · ${vs.name} ${vs.score}` : '';
   watchThemBtn.hidden = !vs;
@@ -466,8 +531,8 @@ let saveTimer = 0;
 // continues bit-for-bit and its replay still matches.
 const SIM_KEYS = ['score', 'current', 'next', 'cooldown', 'overflow', 'near', 'biggest', 'combo', 'comboMult',
   'comboWindow', 'lastMerge', 'fever', 'feverT', 'freeze', 'slowT', 'time', 'tick', 'seed', 'rng', 'log', 'marks',
-  'vs', 'beaten', 'dropped'];
-const BODY_KEYS = ['tier', 'x', 'y', 'px', 'py', 'r', 'r0', 'grow', 'angle', 'spin', 'age'];
+  'vs', 'beaten', 'dropped', 'tricks'];
+const BODY_KEYS = ['tier', 'x', 'y', 'px', 'py', 'r', 'r0', 'grow', 'angle', 'spin', 'age', 'air', 'lx', 'pop', 'fly'];
 
 function save() {
   if (s.phase !== 'play') return;
@@ -485,9 +550,11 @@ function load() {
   for (const k of SIM_KEYS) s[k] = d[k];
   for (const v of d.bodies) {
     const b = makeBody(v[0], 0, 0);
-    BODY_KEYS.forEach((k, i) => { b[k] = v[i]; });
+    BODY_KEYS.forEach((k, i) => { if (i < v.length) b[k] = v[i]; });
+    if (v.length < BODY_KEYS.length) b.lx = b.x;  // saved before trickshots existed
     bodies.push(b);
   }
+  s.tricks ||= 0;
   resetPhysics(d.lastH || 0);
   s.shownScore = s.score;
   s.heldX = heldXFor(s.current ?? s.next);
@@ -557,6 +624,7 @@ function update(dt) {
   if (dir && s.phase === 'play') s.aimX = clamp(s.aimX + dir * 320 * dt, JAR.left, JAR.right);
 
   stepPhysics(gdt, onMerge);
+  airborne(gdt);
   impacts(gdt);
 
   if (s.time - s.lastMerge > s.comboWindow) s.combo = 0;

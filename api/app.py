@@ -70,6 +70,9 @@ TOP_TIER = 9
 # Best case points per seed-sized unit of material: two melons merging is
 # 7120 points from 1024 seeds' worth (≈6.95), and combo ×4 × fever ×2 on top.
 MAX_PTS_PER_UNIT = 7.0 * 8
+# Trickshots (game.js TRICK_BONUS): at most one per merge, so per drop:
+# (25 flat + 2 × 55 melon points) × combo ×4 × fever ×2.
+MAX_TRICK_PER_DROP = (25 + 2 * 55) * 8
 M32 = 0xFFFFFFFF
 
 
@@ -107,7 +110,7 @@ def check(run):
     if any(b < a for a, b in zip(marks, marks[1:])) or marks[0] != 0 or marks[-1] > score:
         return 'bad marks'
     units = sum(2 ** t for t in spawns(run['seed'], len(log)))
-    if score > units * MAX_PTS_PER_UNIT:
+    if score > units * MAX_PTS_PER_UNIT + len(log) * MAX_TRICK_PER_DROP:
         return 'score too high'
     return None
 

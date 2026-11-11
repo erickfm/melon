@@ -41,11 +41,16 @@ export function makeBody(tier, x, y, { r0, vx = 0, vy = 0, angle = 0 } = {}) {
     angle, spin: 0, age: 0, dead: false,
     hit: 0, hnx: 0, hny: 1,              // hardest impact since last read (units/substep)
     sq: 0, sqV: 0, sqA: 0, lastSound: 0, // squash spring, driven by the game
+    // flight clock: seconds since it last touched a fruit or the floor (walls
+    // don't count) and its x then; `touch` is set on contact until the game reads it
+    air: 0, lx: x, touch: 0,
+    pop: 0, fly: 0,                      // trickshot arming, driven by the game
   };
 }
 
 // Radial push, e.g. from a merge. Strength is units/substep at the center.
-export function shockwave(x, y, radius, strength, skip) {
+// `onPush(b)` is told about every body it moves.
+export function shockwave(x, y, radius, strength, skip, onPush) {
   for (const b of bodies) {
     if (b === skip || b.dead) continue;
     const dx = b.x - x, dy = b.y - y, d = Math.sqrt(dx * dx + dy * dy) || 1;
@@ -53,6 +58,7 @@ export function shockwave(x, y, radius, strength, skip) {
     const f = strength * (1 - Math.max(0, d - b.r) / radius) * Math.min(1, 900 / b.m + 0.35);
     b.px -= (dx / d) * f;
     b.py -= (dy / d) * f * 0.6 - f * 0.2;  // mostly sideways, a little up
+    onPush?.(b);
   }
 }
 
@@ -93,12 +99,19 @@ function integrate(h, g) {
     b.px = b.x; b.py = b.y;
     b.x += vx; b.y += vy + g;
     b.angle += b.spin;
+    b.air += h;
     b.spin *= sp < 0.05 ? 0.95 : 0.998;   // settled items stop turning
     if (b.grow < 1) {
       b.grow = Math.min(1, b.grow + h / GROW_TIME);
       b.r = b.r0 + (b.R - b.r0) * easeOutBack(b.grow);
     }
   }
+}
+
+function land(b) {
+  b.air = 0;
+  b.lx = b.x;
+  b.touch = 1;
 }
 
 function recordHit(b, v, nx, ny) {
@@ -123,6 +136,8 @@ function collide(onMerge) {
         onMerge(a, b);
         break;
       }
+      land(a);
+      land(b);
       const d = Math.sqrt(d2) || 1e-4;
       const nx = dx / d, ny = dy / d;
       const wa = b.m / (a.m + b.m), wb = 1 - wa;
@@ -178,6 +193,7 @@ function walls() {
     }
     if (b.y + b.r > JAR.bottom) {
       recordHit(b, vy, 0, 1);
+      land(b);
       b.y = JAR.bottom - b.r;
       b.py = Math.min(b.py, b.y + MAX_SEP);
       b.px += vx * FLOOR_FRICTION;

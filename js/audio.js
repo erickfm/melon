@@ -130,6 +130,16 @@ export function playFever() {
   [0, 1, 2, 3, 4, 5].forEach(i => tone(note(i + 8), t + i * 0.045, 0.25, { type: 'square', vol: 0.05 }));
 }
 
+// Trickshot: a slide-whistle swoop up, then a sparkly run.
+export function playTrick() {
+  if (!ready()) return;
+  const t = ac.currentTime;
+  tone(note(5), t, 0.28, { type: 'sine', vol: 0.16, slide: 3, attack: 0.02 });
+  hiss(t, 0.3, 0.07, 1500, { sweep: 4, q: 1.2 });
+  [0, 2, 4, 7, 9, 12].forEach((s, i) => tone(note(s + 10), t + 0.22 + i * 0.05, 0.35, { vol: 0.1 }));
+  tone(note(22), t + 0.5, 0.6, { type: 'sine', vol: 0.08 });
+}
+
 export function playCombo(combo) {
   if (!ready()) return;
   const t = ac.currentTime;

@@ -17,6 +17,13 @@ export const OVERFLOW_GRACE = 1.0;   // seconds a fresh item is ignored by the d
 export const OVERFLOW_LIMIT = 2.5;   // seconds over the line before game over
 export const MELON_BONUS = 110;      // two melons merging
 
+// Trickshot: a piece knocked loose by a merge flies clear of every fruit and
+// the floor (walls are fine: bank shots count), then merges with its twin.
+export const TRICK_POP = 0.3;    // s after the push for the piece to leave contact
+export const TRICK_AIR = 0.4;    // s in the air before the merge
+export const TRICK_DX = 80;      // units of sideways travel during the flight
+export const TRICK_BONUS = 25;   // flat points plus 2× the new piece's; mirrored in api/app.py
+
 export const NEXT = { x: 250, y: 70, r: 26 };
 export const BUTTONS = {
   mute: { x: 318, y: 40, r: 17 },

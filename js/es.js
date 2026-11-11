@@ -177,15 +177,21 @@ function renderLesson() {
   $('ls-n').textContent = `frase ${shown + 1} de ${DIALOGUES.length}`;
 }
 
+// First tap selects a word and shows its meaning; tapping it again (or 🔊) says it.
 function gloss(el, key) {
+  const speakIt = () => say(el.textContent, 9, { rate: 0.85 });
+  if (el.classList.contains('on')) return speakIt();
   document.querySelectorAll('#lesson .w.on').forEach(w => w.classList.remove('on'));
   el.classList.add('on');
   const g = $('ls-gloss');
   g.replaceChildren();
   const b = document.createElement('b');
   b.textContent = el.textContent;
-  g.append(b, ' · ' + GLOSS[key]);
-  say(el.textContent, 9, { rate: 0.85 });
+  const hear = document.createElement('button');
+  hear.className = 'hear';
+  hear.textContent = '🔊';
+  hear.addEventListener('click', speakIt);
+  g.append(b, ' · ' + GLOSS[key] + ' ', hear);
   st.looked[key] = (st.looked[key] || 0) + 1;
   persist();
 }
