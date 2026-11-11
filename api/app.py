@@ -71,8 +71,8 @@ TOP_TIER = 9
 # 7120 points from 1024 seeds' worth (≈6.95), and combo ×4 × fever ×2 on top.
 MAX_PTS_PER_UNIT = 7.0 * 8
 # Trickshots (constants.js TRICK_BONUS): at most one per merge, so per drop:
-# (25 flat + 2 × 55 melon points) × combo ×4 × fever ×2 × cascade ×3.
-MAX_TRICK_PER_DROP = (25 + 2 * 55) * 8 * 3
+# (25 flat + 2 × 55 melon points) × combo ×4 × fever ×2.
+MAX_TRICK_PER_DROP = (25 + 2 * 55) * 8
 M32 = 0xFFFFFFFF
 
 

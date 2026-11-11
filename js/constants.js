@@ -19,14 +19,16 @@ export const MELON_BONUS = 110;      // two melons merging
 
 // Trickshot: merge → hop → merge → merge. A piece knocked loose by a merge
 // flies clear of every fruit and the floor (walls are fine: bank shots count),
-// lands on its twin, and what that makes merges again. Every further merge in
-// the cascade adds to it.
+// lands on its twin, and what that makes merges again. One per settle: after a
+// trickshot, the next can't happen until the whole jar has been still.
 export const TRICK_POP = 0.3;    // s after the push for the piece to leave contact
 export const TRICK_AIR = 0.42;   // s in the air before landing on its twin
 export const TRICK_DX = 80;      // units of sideways travel during the flight
 export const TRICK_VX = 220;     // units/s average sideways speed over the flight
 export const TRICK_LINK = 1.2;   // s each new piece in the cascade has to merge again
-export const TRICK_BONUS = 25;   // flat points plus 2× the new piece's, × merges past the first (max 3); mirrored in api/app.py
+export const TRICK_STILL = 40;   // units/s: every piece slower than this counts as still
+export const TRICK_SETTLE = 0.3; // s the jar must stay still before another trickshot can happen
+export const TRICK_BONUS = 25;   // flat points plus 2× the new piece's, times combo/fever; mirrored in api/app.py
 
 export const NEXT = { x: 250, y: 70, r: 26 };
 export const BUTTONS = {

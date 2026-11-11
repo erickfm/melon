@@ -12,7 +12,7 @@
 
 import {
   WORLD_W, JAR, DROP_Y, DANGER_Y, STEP, DROP_COOLDOWN, SPAWN_WEIGHTS,
-  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS, TRICK_POP, TRICK_AIR, TRICK_DX, TRICK_VX, TRICK_LINK, TRICK_BONUS,
+  OVERFLOW_GRACE, OVERFLOW_LIMIT, MELON_BONUS, BUTTONS, TRICK_POP, TRICK_AIR, TRICK_DX, TRICK_VX, TRICK_LINK, TRICK_STILL, TRICK_SETTLE, TRICK_BONUS,
 } from './constants.js';
 import { TIERS } from './items.js';
 import { bodies, makeBody, stepPhysics, shockwave, perSecond, getLastH, resetPhysics } from './physics.js';
@@ -157,7 +157,7 @@ function resetRun(seed) {
   Object.assign(s, {
     score: 0, shownScore: 0, cooldown: 0, appearT: 0, overflow: 0, near: 0, biggest: 0, restartArmed: 0,
     combo: 0, comboMult: 1, comboWindow: COMBO_WINDOW, lastMerge: -99, fever: false, feverT: 0,
-    freeze: 0, slowT: 0, time: 0, tick: 0, seed, rng: seed | 0, log: [], marks: [], dropped: false, tricks: 0, bullet: 0,
+    freeze: 0, slowT: 0, time: 0, tick: 0, seed, rng: seed | 0, log: [], marks: [], dropped: false, tricks: 0, bullet: 0, trickLock: false, calmT: 0,
   });
   s.current = roll();
   s.next = roll();
@@ -284,6 +284,20 @@ function trickLink(a, b) {
   return { chain: 1, path: f.path || [f.lx, f.y], tier: f.tier, trace: null };
 }
 
+// The jar has settled once every piece has been slower than TRICK_STILL for
+// TRICK_SETTLE seconds; that re-opens trickshots. Squared speeds (no sqrt) per substep.
+function settle(dt) {
+  if (!s.trickLock) return;
+  const lim = TRICK_STILL * getLastH();
+  let still = true;
+  for (const b of bodies) {
+    const vx = b.x - b.px, vy = b.y - b.py;
+    if (vx * vx + vy * vy > lim * lim) { still = false; break; }
+  }
+  s.calmT = still ? s.calmT + dt : 0;
+  if (s.calmT >= TRICK_SETTLE) s.trickLock = false;
+}
+
 // Camera: punch in on the merge in slow motion, then pull back to frame the
 // whole path while the shooting star runs it. Bullet time (`s.bullet`) is sim
 // state; the camera itself is visual only.
@@ -305,31 +319,37 @@ function camMoments() {
   }
 }
 
-// k = merges since the hop (2 = the first that counts). `t` is the tier it made.
-function trickshot(k, link, x, y, t, mult) {
-  if (k === 2) s.tricks++;
-  const pts = Math.round((TRICK_BONUS + TIERS[t].points * 2) * mult * Math.min(k - 1, 3));
+// `t` is the tier the merge made.
+function trickshot(link, x, y, t, mult) {
+  s.tricks++;
+  s.trickLock = true;  // no more until the jar settles (see settle())
+  s.calmT = 0;
+  const pts = Math.round((TRICK_BONUS + TIERS[t].points * 2) * mult);
   addScore(pts);
   const path = link.path.concat(x, y);
-  link.trace = (link.trace && extendTrace(link.trace, link.fresh.concat(x, y))) || trickTrace(path);
+  link.trace = trickTrace(path);
   s.freeze = Math.max(s.freeze, 0.1);
   s.bullet = Math.max(s.bullet, 0.55);
   focus(x, y, 1.7, { hold: 0.38, rate: 22 });
   revealAt = s.time + 0.38;
   revealBox = bounds(path);
-  popup(clamp(x, JAR.left + 90, JAR.right - 90), y - 34, L('trickshot +', 'tirazo +') + pts, 22 + Math.min(t, 8) * 1.2 + (k - 2) * 3, '#e9842a');
-  banner(k === 2 ? L('TRICKSHOT!', '¡QUÉ TIRO!') : L(`TRICKSHOT ×${k}!`, `¡QUÉ TIRO ×${k}!`), 56 + Math.min(k - 2, 3) * 6, '#e9842a', 300, 1.6);
-  speak(k === 2 ? '¡qué tiro!' : `¡${numberWord(k)}!`, 4);
-  rain(40 + k * 10, ['#e9842a', '#ffd93d', '#fbf5e6', TIERS[link.tier].color]);
-  fx.shake = Math.max(fx.shake, 4 + k);
+  popup(clamp(x, JAR.left + 90, JAR.right - 90), y - 34, L('trickshot +', 'tirazo +') + pts, 22 + Math.min(t, 8) * 1.2, '#e9842a');
+  banner(L('TRICKSHOT!', '¡QUÉ TIRO!'), 56, '#e9842a', 300, 1.6);
+  speak('¡qué tiro!', 4);
+  rain(60, ['#e9842a', '#ffd93d', '#fbf5e6', TIERS[link.tier].color]);
+  fx.shake = Math.max(fx.shake, 6);
   playTrick();
   buzz(2);
 }
 
 // After a merge's own effects: celebrate the cascade, and hand it to the new piece.
+// Once the trickshot has fired, the rest of the cascade only extends the star's path.
 function cascade(link, x, y, t, mult, nb) {
   if (!link) return;
-  if (link.chain >= 2) trickshot(link.chain, link, x, y, t, mult);
+  if (link.chain >= 2) {
+    if (!s.trickLock) trickshot(link, x, y, t, mult);
+    else if (link.trace) link.trace = extendTrace(link.trace, link.fresh.concat(x, y));
+  }
   if (!nb) return;  // a melon pair: nothing left to carry it
   nb.chain = link.chain;
   nb.linkT = TRICK_LINK;
@@ -605,7 +625,7 @@ let saveTimer = 0;
 // continues bit-for-bit and its replay still matches.
 const SIM_KEYS = ['score', 'current', 'next', 'cooldown', 'overflow', 'near', 'biggest', 'combo', 'comboMult',
   'comboWindow', 'lastMerge', 'fever', 'feverT', 'freeze', 'slowT', 'time', 'tick', 'seed', 'rng', 'log', 'marks',
-  'vs', 'beaten', 'dropped', 'tricks', 'bullet'];
+  'vs', 'beaten', 'dropped', 'tricks', 'bullet', 'trickLock', 'calmT'];
 const BODY_KEYS = ['tier', 'x', 'y', 'px', 'py', 'r', 'r0', 'grow', 'angle', 'spin', 'age', 'air', 'lx', 'pop', 'fly', 'chain', 'linkT'];
 
 function save() {
@@ -630,6 +650,8 @@ function load() {
   }
   s.tricks ||= 0;
   s.bullet ||= 0;
+  s.trickLock ||= false;
+  s.calmT ||= 0;
   resetPhysics(d.lastH || 0);
   s.shownScore = s.score;
   s.heldX = heldXFor(s.current ?? s.next);
@@ -707,6 +729,7 @@ function update(dt) {
   stepPhysics(gdt, onMerge);
   airborne(gdt);
   impacts(gdt);
+  settle(gdt);
 
   if (s.time - s.lastMerge > s.comboWindow) s.combo = 0;
   if (s.fever && (s.feverT -= gdt) <= 0) {
